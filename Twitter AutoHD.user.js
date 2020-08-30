@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      0.2
+// @version      0.25
 // @description  Force videos to play highest quality and adds a download option.
 // @author       Invertex
-// @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter%20AutoHD.user.js
-// @downloadURL  https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter%20AutoHD.user.js
+// @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
+// @downloadURL  https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
 // @icon         https://i.imgur.com/M9oO8K9.png
 // @match        https://twitter.com/*
 // @grant        GM_xmlhttpRequest
@@ -150,18 +150,22 @@ async function listenForMediaType(postRoot, tweet)
 
     if(postRoot.querySelector('div[role="blockquote"]') != null) { return; } //Can't get the source post from the blockquote HTML, have to use Twitter API eventually
 
-    let tweetObserver = new MutationObserver(
-        function(mutations)
-        {
-            if(tweet == null || tweet.querySelector('div[data-testid="placementTracking"]') == null) { tweetObserver.disconnect(); return; } //If video, should have placementTracking after first mutation
+    let tweetObserver = new MutationObserver(mediaExists);
+    if(mediaExists()) { return; }
 
-            let video = tweet.querySelector('video');
-            if(video != null) //is video
-            {
-                tweetObserver.disconnect();
-                replaceVideoElement(tweet, video);
-            }
-        });
+    function mediaExists()
+    {
+        if(tweet == null || (!onStatusPage() && tweet.querySelector('div[data-testid="placementTracking"]') == null)) { tweetObserver.disconnect(); return; } //If video, should have placementTracking after first mutation
+
+        let video = tweet.querySelector('video');
+        if(video != null) //is video
+        {
+            tweetObserver.disconnect();
+            replaceVideoElement(tweet, video);
+            return true;
+        }
+        return false;
+    }
 
     tweetObserver.observe(tweet, argsChildAndSub);
 }
@@ -169,12 +173,12 @@ async function listenForMediaType(postRoot, tweet)
 function onTimelineChange(timeline)
 {
      timeline.childNodes.forEach((child) => {
-                if(!child.hasAttribute(modifiedAttr))
-                {
-                    child.setAttribute(modifiedAttr, "");
-                    watchForElem(child, tweetQuery, true, argsChildAndSub, (child, tweet)=> { listenForMediaType(child, tweet); });
-                }
-            });
+         if(!child.hasAttribute(modifiedAttr))
+         {
+             child.setAttribute(modifiedAttr, "");
+             watchForElem(child, tweetQuery, true, argsChildAndSub, (child, tweet)=> { listenForMediaType(child, tweet); });
+         }
+     });
 }
 
 function watchForTimeline(main, timeline)
@@ -196,8 +200,7 @@ function watchForTimeline(main, timeline)
 
 function onMainChange(main)
 {
-    let url = document.location.href;
-    if(url.includes('/status/')) { watchForElem(main, tweetQuery, true, argsChildAndSub, (root, tweet) => listenForMediaType(root, tweet.parentElement)); }
+    if(onStatusPage()) { watchForElem(main, tweetQuery, true, argsChildAndSub, (root, tweet) => listenForMediaType(root, tweet.parentElement)); }
     else{watchForElem(main.querySelector('div[data-testid="primaryColumn"]'), 'section[role="region"] div', true, argsChildAndSub, watchForTimeline); }
 }
 
@@ -221,6 +224,7 @@ async function watchForElem(root, query, stopAfterFinding, obsArguments, execute
             var elem = root.querySelector(query);
             if(elem != null && elem != undefined)
             {
+                //console.log(`Found element '${query}'!`);
                 if(stopAfterFinding === true) { rootObserver.disconnect(); }
                 executeAfter(root, elem);
             }
@@ -229,9 +233,12 @@ async function watchForElem(root, query, stopAfterFinding, obsArguments, execute
     rootObserver.observe(root, obsArguments);
 }
 
+function onStatusPage() { return document.location.href.includes('/status/'); }
+
 (function() {
     'use strict';
     watchForElem(document.querySelector('div#react-root'), 'main[role="main"] div', true, argsChildAndSub, (root, main)=>{
+        onMainChange(main);
         watchForChange(main, false, argsChildOnly, onMainChange);
     });
 })();
