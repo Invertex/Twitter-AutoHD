@@ -4,6 +4,8 @@
 // @version      0.1
 // @description  Force videos to play highest quality and adds a download option.
 // @author       Invertex
+// @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter%20AutoHD.user.js
+// @downloadURL  https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter%20AutoHD.user.js
 // @icon         https://i.imgur.com/M9oO8K9.png
 // @match        https://twitter.com/*
 // @grant        GM_xmlhttpRequest
