@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      0.25
+// @version      0.27
 // @description  Force videos to play highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -147,11 +147,11 @@ async function listenForMediaType(postRoot, tweet)
 {
     if(tweet.hasAttribute(modifiedAttr)) { return; }
     tweet.setAttribute(modifiedAttr, "");
-
-    if(postRoot.querySelector('div[role="blockquote"]') != null) { return; } //Can't get the source post from the blockquote HTML, have to use Twitter API eventually
+  //  if(postRoot.querySelector('div[role="blockquote"]') != null) { console.log("bq"); return; } //Can't get the source post from the blockquote HTML, have to use Twitter API eventually
 
     let tweetObserver = new MutationObserver(mediaExists);
     if(mediaExists()) { return; }
+    tweetObserver.observe(tweet, argsChildAndSub);
 
     function mediaExists()
     {
@@ -166,8 +166,6 @@ async function listenForMediaType(postRoot, tweet)
         }
         return false;
     }
-
-    tweetObserver.observe(tweet, argsChildAndSub);
 }
 
 function onTimelineChange(timeline)
@@ -188,6 +186,7 @@ function watchForTimeline(main, timeline)
         {
             if(timeline.querySelector('[role="progressbar"]') == null)
             {
+                console.log("found timeline");
                 progBarObserver.disconnect();
                 let tl = timeline.querySelector('div');
                 onTimelineChange(tl);
@@ -201,7 +200,15 @@ function watchForTimeline(main, timeline)
 function onMainChange(main)
 {
     if(onStatusPage()) { watchForElem(main, tweetQuery, true, argsChildAndSub, (root, tweet) => listenForMediaType(root, tweet.parentElement)); }
-    else{watchForElem(main.querySelector('div[data-testid="primaryColumn"]'), 'section[role="region"] div', true, argsChildAndSub, watchForTimeline); }
+    else
+    {
+        let primaryColumn = main.querySelector('div[data-testid="primaryColumn"]');
+        if(primaryColumn != null && !primaryColumn.hasAttribute(modifiedAttr))
+        {
+            primaryColumn.setAttribute(modifiedAttr, "");
+            watchForElem(primaryColumn, 'section[role="region"] div', true, argsChildAndSub, watchForTimeline);
+        }
+    }
 }
 
 async function watchForChange(root, stopAfterFirstMutation, obsArguments, executeAfter)
