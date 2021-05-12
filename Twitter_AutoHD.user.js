@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      0.27
+// @version      0.28
 // @description  Force videos to play highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
 // @downloadURL  https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
 // @icon         https://i.imgur.com/M9oO8K9.png
-// @match        https://twitter.com/*
+// @match        https://*.twitter.com/*
+// @noframes
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
 // @run-at document-start
@@ -29,6 +30,8 @@ const dlSVG = '<g><path d="M 8 51 C 5 54 5 48 5 42 L 5 -40 C 5 -45 -5 -45 -5 -40
 
 addGlobalStyle('@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }');
 addGlobalStyle('.loader { border: 16px solid #f3f3f373; display: flex; margin: auto; border-top: 16px solid #3498db99; border-radius: 50%; width: 120px; height: 120px; animation: spin 2s linear infinite;}');
+
+function LogMessage(text) { console.log(text); }
 
 function addGlobalStyle(css) {
     var head, style;
@@ -74,7 +77,7 @@ function download(url, filename)
 async function addDownloadButton(tweet, vidUrl)
 {
     let filename = vidUrl.split('/').pop();
-    let buttonGrp = tweet.closest('article[role="article"]').querySelector('div[role="group"]');
+    let buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"]');
     let dlBtn = buttonGrp.lastChild.cloneNode(true);
     buttonGrp.appendChild(dlBtn);
 
@@ -104,8 +107,10 @@ async function replaceVideoElement(tweet)
     if(tweet != null)
     {
 		let url = window.location.href;
-		let link = tweet.closest('article[role="article"]').querySelector('a[role="link"][dir="auto"][title]');
-		if(link != null){ url = link.href; }
+		let link = tweet.closest('article')?.querySelector('a[role="link"][dir="auto"]');
+        if(link == null) { return; }
+
+		url = link.href;
         url = url.split('?')[0];
 
         let id = url.split('/').pop();
@@ -115,16 +120,21 @@ async function replaceVideoElement(tweet)
         {
             console.log(`used cached vid! : ${cachedVidUrl}`);
             addDownloadButton(tweet, cachedVidUrl);
-            return;
+            return true;
         }
 
          function onLoad(response)
          {
-                let xmlDoc = (new DOMParser()).parseFromString(response.responseText, "text/html");
-                let qualityEntry = xmlDoc.querySelector('table.table tbody tr');
+             let xmlDoc = (new DOMParser()).parseFromString(response.response, "text/html");
+             let qualityEntry = xmlDoc.querySelector('table.table tbody tr');
+
+              //  let xmlDoc = (new DOMParser()).parseFromString(response.responseText, "text");
+             //   let qualityEntry = xmlDoc.querySelector('table.table tbody tr');
                 if(qualityEntry == null) { return; } //Couldn't get a source URL. In future setup own dev account to handle this
-                let vidUrl = qualityEntry.querySelector('a').href;
-                if(vidUrl.includes("#")) { vidUrl = xmlDoc.querySelector('video#video source').src;}
+                let vidUrl = qualityEntry.querySelector('td a').href;
+                if(vidUrl.includes("#")) {
+
+                    vidUrl = xmlDoc.querySelector('video#video source').src;}
                 vidUrl = vidUrl.split('?')[0];
                 vids.set(id, vidUrl);
                 addDownloadButton(tweet, vidUrl);
@@ -137,31 +147,37 @@ async function replaceVideoElement(tweet)
                 "User-Agent": "Mozilla/5.0",
                 "Accept": "text/html"
             },
-            responseType: "document",
+           // overrideMimeType: "application/xml; charset=ISO-8859-1",
+           // responseType: "document",
             onload: onLoad
         });
-    }
+        return true;
+    } else { return false; }
 }
 
 async function listenForMediaType(postRoot, tweet)
 {
     if(tweet.hasAttribute(modifiedAttr)) { return; }
     tweet.setAttribute(modifiedAttr, "");
+   // console.log(tweet);
   //  if(postRoot.querySelector('div[role="blockquote"]') != null) { console.log("bq"); return; } //Can't get the source post from the blockquote HTML, have to use Twitter API eventually
 
     let tweetObserver = new MutationObserver(mediaExists);
-    if(mediaExists()) { return; }
+    if(mediaExists()) { LogMessage("media return"); return; }
     tweetObserver.observe(tweet, argsChildAndSub);
 
     function mediaExists()
     {
         if(tweet == null || (!onStatusPage() && tweet.querySelector('div[data-testid="placementTracking"]') == null)) { tweetObserver.disconnect(); return; } //If video, should have placementTracking after first mutation
-
+        LogMessage("media exists");
         let video = tweet.querySelector('video');
         if(video != null) //is video
         {
+            LogMessage("video exists");
+          //  if(!replaceVideoElement(tweet, video)) {return false;}
+            replaceVideoElement(tweet, video)
             tweetObserver.disconnect();
-            replaceVideoElement(tweet, video);
+
             return true;
         }
         return false;
@@ -248,4 +264,5 @@ function onStatusPage() { return document.location.href.includes('/status/'); }
         onMainChange(main);
         watchForChange(main, false, argsChildOnly, onMainChange);
     });
+
 })();
