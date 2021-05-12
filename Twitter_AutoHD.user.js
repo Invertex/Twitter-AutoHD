@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      0.28
+// @version      0.29
 // @description  Force videos to play highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -11,7 +11,7 @@
 // @noframes
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
-// @run-at document-start
+// @run-at document-body
 // @require https://ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js
 // ==/UserScript==
 
@@ -74,9 +74,10 @@ function download(url, filename)
     });
 }
 
-async function addDownloadButton(tweet, vidUrl)
+async function addDownloadButton(tweet, vidUrl, username)
 {
     let filename = vidUrl.split('/').pop();
+    filename = username + '_' + filename;
     let buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"]');
     let dlBtn = buttonGrp.lastChild.cloneNode(true);
     buttonGrp.appendChild(dlBtn);
@@ -114,12 +115,14 @@ async function replaceVideoElement(tweet)
         url = url.split('?')[0];
 
         let id = url.split('/').pop();
+        let username = url.split('/status/')[0].split('/').pop();
+        console.log(username);
         let cachedVidUrl = vids.get(id);
 
         if(cachedVidUrl != null)
         {
             console.log(`used cached vid! : ${cachedVidUrl}`);
-            addDownloadButton(tweet, cachedVidUrl);
+            addDownloadButton(tweet, cachedVidUrl, username);
             return true;
         }
 
@@ -137,7 +140,7 @@ async function replaceVideoElement(tweet)
                     vidUrl = xmlDoc.querySelector('video#video source').src;}
                 vidUrl = vidUrl.split('?')[0];
                 vids.set(id, vidUrl);
-                addDownloadButton(tweet, vidUrl);
+                addDownloadButton(tweet, vidUrl, username);
           };
 
         GM_xmlhttpRequest({
