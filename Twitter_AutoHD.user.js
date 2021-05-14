@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      0.34
+// @version      0.36
 // @description  Force videos to play highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -9,7 +9,7 @@
 // @icon         https://i.imgur.com/M9oO8K9.png
 // @match        https://*.twitter.com/*
 // @match        https://*.twimg.com/media/*
-// @connect      https://www.savetweetvid.com
+// @connect      savetweetvid.com
 // @noframes
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
@@ -17,7 +17,7 @@
 // @require https://ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js
 // ==/UserScript==
 
-var requestUrl = 'https://www.savetweetvid.com/result?url=';
+const requestUrl = 'https://www.savetweetvid.com/result?url=';
 const modifiedAttr = "THD_modified";
 const tweetQuery = 'div[data-testid="tweet"]';
 
@@ -56,7 +56,7 @@ function addGlobalStyle(css) {
             {
                 if(this.readyState === 4)
                 {
-					var lines = e.target.responseText.split('#');
+					let lines = e.target.responseText.split('#');
                     Object.defineProperty(this, 'response', {writable: true});
                     Object.defineProperty(this, 'responseText', {writable: true});
                     this.response = this.responseText = '#' + lines[1] + '#' + lines[lines.length - 1];
@@ -124,6 +124,15 @@ function waitForImgLoad(img){
     });
 }
 
+function updateImgSrc (imgElem, bgElem, src)
+{
+    if(imgElem.src != src)
+    {
+        imgElem.src = src;
+        bgElem.style.backgroundImage = `url("${src}")`;
+    }
+};
+
 async function updateImageElement(imgLink, imgCnt)
 {
     const imgContainer = await awaitElem(imgLink, 'div[aria-label="Image"]', argsChildAndSub);
@@ -136,15 +145,6 @@ async function updateImageElement(imgLink, imgCnt)
     let naturalWidth = 0;
 
     img.setAttribute(modifiedAttr, "");
-
-    const updateImgSrc = (imgElem, bgElem, src) => {
-        if(imgElem.src != src)
-        {
-            imgElem.src = src;
-            bgElem.style.backgroundImage = `url("${src}")`;
-        }
-    };
-
     updateImgSrc(img, bg, hqSrc);
     doOnAttributeChange(img, (imgElem) => updateImgSrc(imgElem, bg, hqSrc));
 
@@ -179,7 +179,6 @@ async function updateImageElement(imgLink, imgCnt)
              container.style.marginRight = "0%";
               container.style.marginTop = "0%";
          }, true);
-       //  imgContainer.style.margin = "";
     }
     let flexDir = $(imgLink.parentElement).css('flex-direction');
     return {imgElem: img, bgElem: bg, layoutContainer: imgLink.parentElement, width: img.naturalWidth, height: img.naturalHeight, flex: flexDir};
@@ -423,7 +422,7 @@ function doOnAttributeChange(elem, onChange, repeatOnce = false)
       let rootObserver = new MutationObserver((mutes, obvs) => {
           obvs.disconnect();
           onChange(elem);
-          if(repeatOnce) { return; }
+          if(repeatOnce == true) { return; }
           obvs.observe(elem, {childList: false, subtree: false, attributes: true})
       });
     rootObserver.observe(elem, {childList: false, subtree: false, attributes: true});
@@ -432,7 +431,7 @@ function doOnAttributeChange(elem, onChange, repeatOnce = false)
 
 function onStatusPage() { return document.location.href.includes('/status/'); }
 
-function onMainChange(main)
+function onMainChange(main, mutations)
 {
     let primaryColumn = main.querySelector('div[data-testid="primaryColumn"]');
     if(primaryColumn != null)
@@ -446,9 +445,41 @@ function onMainChange(main)
     }
 }
 
+async function updateFullViewImage(img)
+{
+ //   if(!img.complete || img.naturalHeight == 0) { await waitForImgLoad(img); }
+    let bg = img.parentElement.querySelector('div');
+    let hqSrc = getHighQualityImage(img.src);
+    updateImgSrc(img, bg, hqSrc);
+    doOnAttributeChange(img, (imgElem) => {updateImgSrc(imgElem, bg, hqSrc);}, false);
+}
+
+async function onLayersChange(layers, mutation)
+{
+    if(mutation.addedNodes != null && mutation.addedNodes.length > 0)
+    {
+        let addedElems = Array.from(mutation.addedNodes);
+        let dialog = await awaitElem(addedElems[0], 'div[role="dialog"]', argsChildAndSub);
+        let img = await awaitElem(dialog, 'img[alt="Image"]', argsChildAndSub);
+        let list = dialog.querySelector('ul[role="list"]');
+
+        if(list != null)
+        {
+            let listItems = list.querySelectorAll('li');
+
+            listItems.forEach((panel) => {
+                awaitElem(panel, 'img[alt="Image"]', argsChildAndSub)
+                    .then((img) => updateFullViewImage(img)); });
+        }
+        else { updateFullViewImage(img); }
+    }
+}
+
 async function watchForChange(root, obsArguments, onChange)
 {
-    let rootObserver = new MutationObserver( function(mutations) { onChange(root); });
+    let rootObserver = new MutationObserver(function(mutations) {
+        mutations.forEach((mutation) => onChange(root, mutation));
+    });
     rootObserver.observe(root, obsArguments);
 }
 
@@ -471,7 +502,9 @@ function checkIfFileUrl(url)
     if(checkIfFileUrl(window.location.href)) { return; }
 
     NodeList.prototype.forEach = Array.prototype.forEach;
-    const main = await awaitElem(document.querySelector('div#react-root'), 'main[role="main"] div', argsChildAndSub);
+    let reactRoot = document.querySelector('div#react-root');
+    const main = await awaitElem(reactRoot, 'main[role="main"] div', argsChildAndSub);
+    awaitElem(reactRoot, 'div#layers', argsChildAndSub).then((layers) => { watchForChange(layers, argsChildOnly, onLayersChange); });
     onMainChange(main);
     watchForChange(main, argsChildOnly, onMainChange);
 })();
