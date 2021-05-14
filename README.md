@@ -1,6 +1,7 @@
 # Twitter AutoHD
-Automatically makes Twitter load the highest resolution of video.<br/>
+Automatically makes Twitter load the highest resolution of video or image.<br/>
 Also adds a download button for them on the tweet buttons bar (won't work on retweets for now, go to original post first).
+Images will also layout in full view automatically if possible, or show as much as possible for multi-image layouts.
 
 <img src="https://i.gyazo.com/3ef79354c0f4ef8b0a8106d377501cc4.gif"/>
 
