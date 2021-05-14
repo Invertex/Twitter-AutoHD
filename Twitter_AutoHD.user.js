@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      0.32
+// @version      0.34
 // @description  Force videos to play highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
 // @downloadURL  https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
 // @icon         https://i.imgur.com/M9oO8K9.png
 // @match        https://*.twitter.com/*
+// @match        https://*.twimg.com/media/*
 // @connect      https://www.savetweetvid.com
 // @noframes
 // @grant        GM_xmlhttpRequest
@@ -451,8 +452,24 @@ async function watchForChange(root, obsArguments, onChange)
     rootObserver.observe(root, obsArguments);
 }
 
+function checkIfFileUrl(url)
+{
+    if(url.includes('/media/') && url.includes('format=') && url.includes('name='))
+    {
+        if(!url.includes('name=orig'))
+        {
+            let hqUrl = getHighQualityImage(url);
+            window.location.href = getHighQualityImage(url);
+        }
+        return true;
+    }
+    return false;
+}
+
 (async function() {
     'use strict';
+    if(checkIfFileUrl(window.location.href)) { return; }
+
     NodeList.prototype.forEach = Array.prototype.forEach;
     const main = await awaitElem(document.querySelector('div#react-root'), 'main[role="main"] div', argsChildAndSub);
     onMainChange(main);
