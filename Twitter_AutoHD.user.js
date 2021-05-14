@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      0.29
+// @version      0.32
 // @description  Force videos to play highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
 // @downloadURL  https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
 // @icon         https://i.imgur.com/M9oO8K9.png
 // @match        https://*.twitter.com/*
+// @connect      https://www.savetweetvid.com
 // @noframes
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
@@ -31,7 +32,7 @@ const dlSVG = '<g><path d="M 8 51 C 5 54 5 48 5 42 L 5 -40 C 5 -45 -5 -45 -5 -40
 addGlobalStyle('@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }');
 addGlobalStyle('.loader { border: 16px solid #f3f3f373; display: flex; margin: auto; border-top: 16px solid #3498db99; border-radius: 50%; width: 120px; height: 120px; animation: spin 2s linear infinite;}');
 
-function LogMessage(text) { console.log(text); }
+function LogMessage(text) { /*console.log(text);*/ }
 
 function addGlobalStyle(css) {
     var head, style;
@@ -70,7 +71,7 @@ function download(url, filename)
     GM_download({
         name: filename,
         url: url,
-        onload: function() { console.log(`Downloaded ${url}!`); }
+        onload: function() { LogMessage(`Downloaded ${url}!`); }
     });
 }
 
@@ -103,9 +104,147 @@ async function addDownloadButton(tweet, vidUrl, username)
     $(linkElem).click(function(e){ e.preventDefault(); download(vidUrl, filename); });
 }
 
+function addHasAttribute(elem, attr)
+{
+    if(elem.hasAttribute(attr)) { return true; }
+    elem.setAttribute(attr, "");
+    return false;
+}
+
+function getHighQualityImage(url)
+{
+    return url.replace(/(?<=[\&\?]name=)([A-Za-z0-9])+(?=\&)?/, 'orig');
+}
+
+function waitForImgLoad(img){
+    return new Promise((resolve, reject) => {
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+    });
+}
+
+async function updateImageElement(imgLink, imgCnt)
+{
+    const imgContainer = await awaitElem(imgLink, 'div[aria-label="Image"]', argsChildAndSub);
+    const img = await awaitElem(imgContainer, 'IMG', argsChildAndSub);
+    const hqSrc = getHighQualityImage(img.src);
+    const bg = imgContainer.querySelector('div[style^="background-image"]');
+    LogMessage(imgLink);
+
+    let naturalHeight = 0;
+    let naturalWidth = 0;
+
+    img.setAttribute(modifiedAttr, "");
+
+    const updateImgSrc = (imgElem, bgElem, src) => {
+        if(imgElem.src != src)
+        {
+            imgElem.src = src;
+            bgElem.style.backgroundImage = `url("${src}")`;
+        }
+    };
+
+    updateImgSrc(img, bg, hqSrc);
+    doOnAttributeChange(img, (imgElem) => updateImgSrc(imgElem, bg, hqSrc));
+
+    if(!img.complete || img.naturalHeight == 0) { await waitForImgLoad(img); }
+    naturalHeight = img.naturalHeight; naturalWidth = img.naturalWidth;
+/*
+    if(imgCnt < 2)
+    {
+        imgContainer.removeAttribute("style");
+        bg.style.backgroundSize = "contain";
+        doOnAttributeChange(imgContainer, (container) => { container.removeAttribute("style");}, true )
+    } else
+    {
+        imgContainer.removeAttribute("style");;
+         doOnAttributeChange(imgContainer, (container) => { container.removeAttribute("style"); }, true )
+       //  imgContainer.style.margin = "";
+    }
+*/
+    if(imgCnt < 3) { bg.style.backgroundSize = "contain"; }
+    if(imgCnt < 2)
+    {
+        imgContainer.removeAttribute('style');
+        doOnAttributeChange(imgContainer, (container) => {container.removeAttribute('style');}, true );
+    }
+    else
+    {
+        imgContainer.style.marginLeft = "0%";
+         imgContainer.style.marginRight = "0%";
+         imgContainer.style.marginTop = "0%";
+         doOnAttributeChange(imgContainer, (container) =>{
+             container.style.marginLeft = "0%";
+             container.style.marginRight = "0%";
+              container.style.marginTop = "0%";
+         }, true);
+       //  imgContainer.style.margin = "";
+    }
+    let flexDir = $(imgLink.parentElement).css('flex-direction');
+    return {imgElem: img, bgElem: bg, layoutContainer: imgLink.parentElement, width: img.naturalWidth, height: img.naturalHeight, flex: flexDir};
+}
+
+async function updateImageElements(tweet, imgLinks)
+{
+
+    if(tweet != null && imgLinks != null && !addHasAttribute(tweet, modifiedAttr))
+    {
+        let imgCnt = imgLinks.length;
+        if(imgCnt == 0) { return; }
+        let padder = imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement.querySelector('div[style^="padding-bottom"]');
+
+        const images = [];
+
+        for(let link = 0; link < imgCnt; link++)
+        {
+            let imgData = await updateImageElement(imgLinks[link], imgCnt);
+            images.push(imgData);
+        }
+       imgCnt = images.length;
+        LogMessage(imgCnt);
+        let ratio = 100;
+
+        if(imgCnt == 1 || (imgCnt == 2 && images[0].flex == "column"))
+        {
+            ratio = (images[0].height / images[0].width) * 100;
+            LogMessage("flex column: +" + imgCnt);
+        }
+        else if(imgCnt == 2 && images[0].flex == "row")
+        {
+            let img1 = images[0]; let img2 = images[1];
+            ratio = img1.height / (img1.width);
+            ratio *= 100;
+            ratio *= 0.5;
+            img1.bgElem.style.backgroundSize = "contain";
+            img2.bgElem.style.backgroundSize = "cover";
+            img1.layoutContainer.removeAttribute("style");
+            img2.layoutContainer.removeAttribute("style");
+        }
+        else if(imgCnt == 3 && images[0].flex == "row")
+        {
+            let img1 = images[0];
+            let img1Ratio = img1.height / img1.width;
+            if(img1Ratio < 1.10 && img1Ratio > 0.9){ img1.bgElem.style.backgroundSize = "contain"; }
+        }
+        else if(imgCnt == 4)
+        {
+            if(images[0].width > images[0].height
+               && images[1].width > images[1].height
+               && images[2].width > images[2].height
+               && images[3].width > images[3].height) { return; } //All-wide 4-panel already has an optimal layout by default.
+        }
+
+        padder.style = `padding-bottom: ${ratio}%;`;
+        padder.setAttribute("modifiedPadding","");
+        doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + ratio + "%;";} )
+        LogMessage(padder);
+        LogMessage(ratio);
+    }
+}
+
 async function replaceVideoElement(tweet)
 {
-    if(tweet != null)
+    if(tweet != null && !addHasAttribute(tweet, modifiedAttr))
     {
 		let url = window.location.href;
 		let link = tweet.closest('article')?.querySelector('a[role="link"][dir="auto"]');
@@ -116,12 +255,11 @@ async function replaceVideoElement(tweet)
 
         let id = url.split('/').pop();
         let username = url.split('/status/')[0].split('/').pop();
-        console.log(username);
         let cachedVidUrl = vids.get(id);
 
         if(cachedVidUrl != null)
         {
-            console.log(`used cached vid! : ${cachedVidUrl}`);
+         //   LogMessage(`used cached vid! : ${cachedVidUrl}`);
             addDownloadButton(tweet, cachedVidUrl, username);
             return true;
         }
@@ -158,44 +296,65 @@ async function replaceVideoElement(tweet)
     } else { return false; }
 }
 
-async function listenForMediaType(postRoot, tweet)
+function mediaExists(tweet, tweetObserver)
 {
-    if(tweet.hasAttribute(modifiedAttr)) { return; }
-    tweet.setAttribute(modifiedAttr, "");
-   // console.log(tweet);
-  //  if(postRoot.querySelector('div[role="blockquote"]') != null) { console.log("bq"); return; } //Can't get the source post from the blockquote HTML, have to use Twitter API eventually
+    if(tweet == null || tweet.hasAttribute(modifiedAttr) /*|| (!onStatusPage() && tweet.querySelector('div[data-testid="placementTracking"]') == null)*/) { return false; } //If video, should have placementTracking after first mutation
+   // LogMessage("media exists");
 
-    let tweetObserver = new MutationObserver(mediaExists);
-    if(mediaExists()) { LogMessage("media return"); return; }
-    tweetObserver.observe(tweet, argsChildAndSub);
-
-    function mediaExists()
+    let video = tweet.querySelector('video');
+    if(video != null) //is video
     {
-        if(tweet == null || (!onStatusPage() && tweet.querySelector('div[data-testid="placementTracking"]') == null)) { tweetObserver.disconnect(); return; } //If video, should have placementTracking after first mutation
-        LogMessage("media exists");
-        let video = tweet.querySelector('video');
-        if(video != null) //is video
-        {
-            LogMessage("video exists");
-          //  if(!replaceVideoElement(tweet, video)) {return false;}
-            replaceVideoElement(tweet, video)
-            tweetObserver.disconnect();
-
-            return true;
-        }
-        return false;
+        tweetObserver.disconnect();
+     //   tweet.setAttribute(modifiedAttr, "");
+        replaceVideoElement(tweet, video)
+        return true;
     }
+
+    const allLinks = Array.from(tweet.querySelectorAll('a'));
+    const imgLinks = [];
+    allLinks.forEach((imgLink) =>
+    {
+      //  let linky = imgLink.closest('a[role="link"]');
+      //  if(linky.href.includes('/photo/')) {imgLinks.push(linky); }
+
+        if(imgLink.href.includes('/photo/') && imgLink.closest('div[tabindex][role="link"]') == null/* && imgLink.querySelector('div[data-testid="tweetPhoto"]') != null*/)
+        {
+
+            imgLinks.push(imgLink);
+        }
+    });
+
+    if(imgLinks.length > 0)
+    {
+        tweetObserver.disconnect();
+     //   tweet.setAttribute(modifiedAttr, "");
+        updateImageElements(tweet, imgLinks);
+        return true;
+    }
+    return false;
 }
 
-function onTimelineChange(timeline)
+async function listenForMediaType(article, tweet)
 {
-     timeline.childNodes.forEach((child) => {
-         if(!child.hasAttribute(modifiedAttr))
-         {
-             child.setAttribute(modifiedAttr, "");
-             watchForElem(child, tweetQuery, true, argsChildAndSub, (child, tweet)=> { listenForMediaType(child, tweet); });
-         }
-     });
+    if(addHasAttribute(tweet, "thdObserver")) { return; }
+
+  //  if(postRoot.querySelector('div[role="blockquote"]') != null) { LogMessage("bq"); return; } //Can't get the source post from the blockquote HTML, have to use Twitter API eventually
+
+    let tweetObserver = new MutationObserver((muteList, observer) => { mediaExists(tweet, observer); });
+    if(mediaExists(tweet, tweetObserver)) { return; }
+    tweetObserver.observe(tweet, argsChildAndSub);
+}
+
+function onTimelineChange(addedNodes)
+{
+    addedNodes.forEach((child) =>
+    {
+        if(addHasAttribute(child, modifiedAttr)) { return; }
+
+        awaitElem(child, 'ARTICLE', argsChildAndSub)
+            .then(article => awaitElem(article, tweetQuery, argsChildAndSub)
+                  .then(tweet => { listenForMediaType(article, tweet); }));
+    });
 }
 
 function watchForTimeline(main, timeline)
@@ -205,67 +364,97 @@ function watchForTimeline(main, timeline)
         {
             if(timeline.querySelector('[role="progressbar"]') == null)
             {
-                console.log("found timeline");
                 progBarObserver.disconnect();
-                let tl = timeline.querySelector('div');
-                onTimelineChange(tl);
-                watchForChange(tl, false, argsChildAndAttr, onTimelineChange);
+
+                let tl = timeline.querySelector("DIV");
+                tl.setAttribute('timeline', "");
+               // if(tl) { LogMessage("found timeline"); LogMessage(tl); }
+                let childNodes = Array.from(tl.childNodes);
+                onTimelineChange(childNodes);
+
+                watchForAddedNodes(tl, false, argsChildAndSub, onTimelineChange);
             }
         });
 
     progBarObserver.observe(timeline, argsChildAndSub);
 }
 
-function onMainChange(main)
+
+async function watchForAddedNodes(root, stopAfterFirstMutation, obsArguments, executeAfter)
 {
-    if(onStatusPage()) { watchForElem(main, tweetQuery, true, argsChildAndSub, (root, tweet) => listenForMediaType(root, tweet.parentElement)); }
-    else
+    let rootObserver = new MutationObserver(
+        function(mutations)
+        {
+            mutations.forEach(function(mutation) {
+                if(mutation.addedNodes == null || mutation.addedNodes.length == 0) { return; }
+                if(stopAfterFirstMutation) { rootObserver.disconnect(); }
+                executeAfter(mutation.addedNodes);
+            });
+
+        });
+
+    rootObserver.observe(root, obsArguments);
+}
+
+function findElem(rootElem, query, observer, resolve)
+{
+    const elem = rootElem.querySelector(query);
+    if(elem != null && elem != undefined)
     {
-        let primaryColumn = main.querySelector('div[data-testid="primaryColumn"]');
-        if(primaryColumn != null && !primaryColumn.hasAttribute(modifiedAttr))
-        {
-            primaryColumn.setAttribute(modifiedAttr, "");
-            watchForElem(primaryColumn, 'section[role="region"] div', true, argsChildAndSub, watchForTimeline);
-        }
+        resolve(elem);
+        observer?.disconnect();
     }
+    return elem;
 }
 
-async function watchForChange(root, stopAfterFirstMutation, obsArguments, executeAfter)
+async function awaitElem(root, query, obsArguments)
 {
-    let rootObserver = new MutationObserver(
-        function(mutations)
-        {
-            if(stopAfterFirstMutation) { rootObserver.disconnect(); }
-            executeAfter(root);
-        });
-
-    rootObserver.observe(root, obsArguments);
+     return new Promise((resolve, reject) =>
+     {
+         if(findElem(root, query, null, resolve)) { return; }
+         let rootObserver = new MutationObserver((mutes, obs) => { findElem(root, query, obs, resolve); } );
+         rootObserver.observe(root, obsArguments);
+    });
 }
 
-async function watchForElem(root, query, stopAfterFinding, obsArguments, executeAfter)
+function doOnAttributeChange(elem, onChange, repeatOnce = false)
 {
-    let rootObserver = new MutationObserver(
-        function(mutations)
-        {
-            var elem = root.querySelector(query);
-            if(elem != null && elem != undefined)
-            {
-                //console.log(`Found element '${query}'!`);
-                if(stopAfterFinding === true) { rootObserver.disconnect(); }
-                executeAfter(root, elem);
-            }
-        });
-
-    rootObserver.observe(root, obsArguments);
+      let rootObserver = new MutationObserver((mutes, obvs) => {
+          obvs.disconnect();
+          onChange(elem);
+          if(repeatOnce) { return; }
+          obvs.observe(elem, {childList: false, subtree: false, attributes: true})
+      });
+    rootObserver.observe(elem, {childList: false, subtree: false, attributes: true});
 }
+
 
 function onStatusPage() { return document.location.href.includes('/status/'); }
 
-(function() {
-    'use strict';
-    watchForElem(document.querySelector('div#react-root'), 'main[role="main"] div', true, argsChildAndSub, (root, main)=>{
-        onMainChange(main);
-        watchForChange(main, false, argsChildOnly, onMainChange);
-    });
+function onMainChange(main)
+{
+    let primaryColumn = main.querySelector('div[data-testid="primaryColumn"]');
+    if(primaryColumn != null)
+    {
+        if(addHasAttribute(primaryColumn, modifiedAttr)) { return; }
+        awaitElem(primaryColumn, 'section[role="region"] > div', argsChildAndSub).then((section) => { watchForTimeline(primaryColumn, section); });
 
+    } else if(onStatusPage())
+    {
+        awaitElem(main, tweetQuery, argsChildAndSub).then((tweet) => { listenForMediaType(main, tweet.parentElement); });
+    }
+}
+
+async function watchForChange(root, obsArguments, onChange)
+{
+    let rootObserver = new MutationObserver( function(mutations) { onChange(root); });
+    rootObserver.observe(root, obsArguments);
+}
+
+(async function() {
+    'use strict';
+    NodeList.prototype.forEach = Array.prototype.forEach;
+    const main = await awaitElem(document.querySelector('div#react-root'), 'main[role="main"] div', argsChildAndSub);
+    onMainChange(main);
+    watchForChange(main, argsChildOnly, onMainChange);
 })();
