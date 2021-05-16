@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      0.36
-// @description  Forces whole image to show on timeline and bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download option.
+// @version      0.38
+// @description  Force videos to play highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
 // @downloadURL  https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -21,7 +21,7 @@ const requestUrl = 'https://www.savetweetvid.com/result?url=';
 const modifiedAttr = "THD_modified";
 const tweetQuery = 'div[data-testid="tweet"]';
 
-var vids = new Map();
+var vids = new Map(); //Cache download links for tweets we've already processed this session to reduce API timeout potential and speed-up button creation when the same media is loaded onto timeline again
 
 const argsChildAndSub = {attributes: false, childList: true, subtree: true};
 const argsChildOnly = {attributes: false, childList: true, subtree: false};
@@ -78,10 +78,14 @@ function download(url, filename)
 
 async function addDownloadButton(tweet, vidUrl, username)
 {
+    let buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"]');
+    if(buttonGrp == null || buttonGrp.querySelector('div#thd_dl') != null) { return; } //Button group doesn't exist or we already processed this element and added a DL button
+
     let filename = vidUrl.split('/').pop();
     filename = username + '_' + filename;
-    let buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"]');
+
     let dlBtn = buttonGrp.lastChild.cloneNode(true);
+    dlBtn.id = "thd_dl";
     buttonGrp.appendChild(dlBtn);
 
     let svg = dlBtn.querySelector('svg');
@@ -305,7 +309,6 @@ function mediaExists(tweet, tweetObserver)
     if(video != null) //is video
     {
         tweetObserver.disconnect();
-     //   tweet.setAttribute(modifiedAttr, "");
         replaceVideoElement(tweet, video)
         return true;
     }
@@ -314,12 +317,8 @@ function mediaExists(tweet, tweetObserver)
     const imgLinks = [];
     allLinks.forEach((imgLink) =>
     {
-      //  let linky = imgLink.closest('a[role="link"]');
-      //  if(linky.href.includes('/photo/')) {imgLinks.push(linky); }
-
         if(imgLink.href.includes('/photo/') && imgLink.closest('div[tabindex][role="link"]') == null/* && imgLink.querySelector('div[data-testid="tweetPhoto"]') != null*/)
         {
-
             imgLinks.push(imgLink);
         }
     });
@@ -327,7 +326,6 @@ function mediaExists(tweet, tweetObserver)
     if(imgLinks.length > 0)
     {
         tweetObserver.disconnect();
-     //   tweet.setAttribute(modifiedAttr, "");
         updateImageElements(tweet, imgLinks);
         return true;
     }
@@ -368,7 +366,6 @@ function watchForTimeline(main, timeline)
 
                 let tl = timeline.querySelector("DIV");
                 tl.setAttribute('timeline', "");
-               // if(tl) { LogMessage("found timeline"); LogMessage(tl); }
                 let childNodes = Array.from(tl.childNodes);
                 onTimelineChange(childNodes);
 
@@ -447,7 +444,6 @@ function onMainChange(main, mutations)
 
 async function updateFullViewImage(img)
 {
- //   if(!img.complete || img.naturalHeight == 0) { await waitForImgLoad(img); }
     let bg = img.parentElement.querySelector('div');
     let hqSrc = getHighQualityImage(img.src);
     updateImgSrc(img, bg, hqSrc);
