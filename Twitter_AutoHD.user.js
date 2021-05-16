@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      0.38
-// @description  Force videos to play highest quality and adds a download option.
+// @version      0.39
+// @description  Forces whole image to show on timeline and bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
 // @downloadURL  https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
