@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      0.39
+// @version      0.41
 // @description  Forces whole image to show on timeline and bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -33,10 +33,11 @@ const dlSVG = '<g><path d="M 8 51 C 5 54 5 48 5 42 L 5 -40 C 5 -45 -5 -45 -5 -40
 addGlobalStyle('@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }');
 addGlobalStyle('.loader { border: 16px solid #f3f3f373; display: flex; margin: auto; border-top: 16px solid #3498db99; border-radius: 50%; width: 120px; height: 120px; animation: spin 2s linear infinite;}');
 
-function LogMessage(text) { /*console.log(text);*/ }
+function LogMessage(text) { //console.log(text);
+}
 
 function addGlobalStyle(css) {
-    var head, style;
+    let head, style;
     head = document.getElementsByTagName('head')[0];
     if (!head) { return; }
     style = document.createElement('style');
@@ -48,15 +49,15 @@ function addGlobalStyle(css) {
 //Intercept m3u8 playlist requests and modify the contents to only include the highest quality
 (function(open)
  {
-    XMLHttpRequest.prototype.open = function(method,url) {
-
+    XMLHttpRequest.prototype.open = function(method,url)
+    {
         if(url.includes('video.twimg.com') && url.includes('.m3u8?tag='))
         {
             this.addEventListener('readystatechange', function(e)
             {
                 if(this.readyState === 4)
                 {
-					let lines = e.target.responseText.split('#');
+					const lines = e.target.responseText.split('#');
                     Object.defineProperty(this, 'response', {writable: true});
                     Object.defineProperty(this, 'responseText', {writable: true});
                     this.response = this.responseText = '#' + lines[1] + '#' + lines[lines.length - 1];
@@ -78,23 +79,23 @@ function download(url, filename)
 
 async function addDownloadButton(tweet, vidUrl, username)
 {
-    let buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"]');
+    const buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"]');
     if(buttonGrp == null || buttonGrp.querySelector('div#thd_dl') != null) { return; } //Button group doesn't exist or we already processed this element and added a DL button
 
     let filename = vidUrl.split('/').pop();
-    filename = username + '_' + filename;
+    filename = username + ' - ' + filename;
 
-    let dlBtn = buttonGrp.lastChild.cloneNode(true);
+    const dlBtn = buttonGrp.lastChild.cloneNode(true);
     dlBtn.id = "thd_dl";
     buttonGrp.appendChild(dlBtn);
 
-    let svg = dlBtn.querySelector('svg');
+    const svg = dlBtn.querySelector('svg');
     svg.innerHTML = dlSVG;
     svg.setAttribute('viewBox', "-80 -80 160 160");
-    let iconDiv = dlBtn.querySelector('div[dir="ltr"]');
-    let oldIconColor = $(iconDiv).css("color");
-    let bg = iconDiv.firstElementChild.firstElementChild;
-    let oldBGColor = $(bg).css("background-color");
+    const iconDiv = dlBtn.querySelector('div[dir="ltr"]');
+    const oldIconColor = $(iconDiv).css("color");
+    const bg = iconDiv.firstElementChild.firstElementChild;
+    const oldBGColor = $(bg).css("background-color");
     //Emulate Twitter hover color change
     $(dlBtn).hover(function(){
         $(bg).css("background-color", "#f3d60720");
@@ -104,7 +105,7 @@ async function addDownloadButton(tweet, vidUrl, username)
         $(iconDiv).css("color", oldIconColor);
     });
 
-    let linkElem = $(dlBtn).wrapAll(`<a href="${vidUrl}" download="${filename}"></a>`);
+    const linkElem = $(dlBtn).wrapAll(`<a href="${vidUrl}" download="${filename}"></a>`);
     $(dlBtn.parentNode).addClass(dlBtn.className);
     $(linkElem).click(function(e){ e.preventDefault(); download(vidUrl, filename); });
 }
@@ -128,7 +129,7 @@ function waitForImgLoad(img){
     });
 }
 
-function updateImgSrc (imgElem, bgElem, src)
+function updateImgSrc(imgElem, bgElem, src)
 {
     if(imgElem.src != src)
     {
@@ -176,26 +177,25 @@ async function updateImageElement(imgLink, imgCnt)
     else
     {
         imgContainer.style.marginLeft = "0%";
-         imgContainer.style.marginRight = "0%";
-         imgContainer.style.marginTop = "0%";
-         doOnAttributeChange(imgContainer, (container) =>{
-             container.style.marginLeft = "0%";
-             container.style.marginRight = "0%";
-              container.style.marginTop = "0%";
+        imgContainer.style.marginRight = "0%";
+        imgContainer.style.marginTop = "0%";
+        doOnAttributeChange(imgContainer, (container) => {
+            container.style.marginLeft = "0%";
+            container.style.marginRight = "0%";
+            container.style.marginTop = "0%";
          }, true);
     }
-    let flexDir = $(imgLink.parentElement).css('flex-direction');
+    const flexDir = $(imgLink.parentElement).css('flex-direction');
     return {imgElem: img, bgElem: bg, layoutContainer: imgLink.parentElement, width: img.naturalWidth, height: img.naturalHeight, flex: flexDir};
 }
 
 async function updateImageElements(tweet, imgLinks)
 {
-
     if(tweet != null && imgLinks != null && !addHasAttribute(tweet, modifiedAttr))
     {
         let imgCnt = imgLinks.length;
         if(imgCnt == 0) { return; }
-        let padder = imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement.querySelector('div[style^="padding-bottom"]');
+        const padder = imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement.querySelector('div[style^="padding-bottom"]');
 
         const images = [];
 
@@ -204,14 +204,12 @@ async function updateImageElements(tweet, imgLinks)
             let imgData = await updateImageElement(imgLinks[link], imgCnt);
             images.push(imgData);
         }
-       imgCnt = images.length;
-        LogMessage(imgCnt);
+        imgCnt = images.length;
         let ratio = 100;
 
         if(imgCnt == 1 || (imgCnt == 2 && images[0].flex == "column"))
         {
             ratio = (images[0].height / images[0].width) * 100;
-            LogMessage("flex column: +" + imgCnt);
         }
         else if(imgCnt == 2 && images[0].flex == "row")
         {
@@ -241,49 +239,60 @@ async function updateImageElements(tweet, imgLinks)
         padder.style = `padding-bottom: ${ratio}%;`;
         padder.setAttribute("modifiedPadding","");
         doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + ratio + "%;";} )
-        LogMessage(padder);
-        LogMessage(ratio);
     }
+}
+
+function onLoadVideo (xmlDoc, tweetElem, vidID, username)
+{
+    const qualityEntry = xmlDoc.querySelector('table.table tbody tr'); //First quality entry will be highest
+    if(qualityEntry == null) { return; } //Couldn't get a source URL. In future setup own dev account to handle this
+    let vidUrl = qualityEntry.querySelector('td a').href;
+    if(vidUrl.includes("#")) { vidUrl = xmlDoc.querySelector('video#video source').src; }
+    vidUrl = vidUrl.split('?')[0];
+    vids.set(vidID, vidUrl);
+
+    LogMessage("cache vid: " + vidID + ":" + vidUrl);
+    addDownloadButton(tweetElem, vidUrl, username);
+};
+
+function getUrlFromTweet(tweet)
+{
+    let article = tweet.closest('article');
+    if(article == null) { return null; }
+
+    let linkElem = article.querySelector('div[dir="auto"] > a:not([href$="/retweets"],[href$="/likes"])[href*="/status/"][role="link"]');
+    if(linkElem == null)
+    {
+        linkElem = article.querySelector('a:not([href$="/retweets"],[href$="/likes"])[href*="/status/"][role="link"][dir="auto"]');
+    }
+    if(linkElem) { return linkElem.href; }
+
+    let curBrowserUrl = window.location.href;
+    if(curBrowserUrl.includes('/status/')) { return curBrowserUrl; }
+    return null;
 }
 
 async function replaceVideoElement(tweet)
 {
     if(tweet != null && !addHasAttribute(tweet, modifiedAttr))
     {
-		let url = window.location.href;
-		let link = tweet.closest('article')?.querySelector('a[role="link"][dir="auto"]');
-        if(link == null) { return; }
 
-		url = link.href;
-        url = url.split('?')[0];
+		let link = getUrlFromTweet(tweet);
+        if(link == null) { return false; }
+LogMessage(link);
+		const url = link.split('?')[0]
+      //  url = url.split('?')[0];
 
-        let id = url.split('/').pop();
-        let username = url.split('/status/')[0].split('/').pop();
-        let cachedVidUrl = vids.get(id);
+        const id = url.split('/').pop();
+        const username = url.split('/status/')[0].split('/').pop();
+        const cachedVidUrl = vids.get(id);
 
         if(cachedVidUrl != null)
         {
-         //   LogMessage(`used cached vid! : ${cachedVidUrl}`);
+            LogMessage(`used cached vid! : ${cachedVidUrl} id: ${id} url: ${url} username: ${username}`);
             addDownloadButton(tweet, cachedVidUrl, username);
             return true;
         }
-
-         function onLoad(response)
-         {
-             let xmlDoc = (new DOMParser()).parseFromString(response.response, "text/html");
-             let qualityEntry = xmlDoc.querySelector('table.table tbody tr');
-
-              //  let xmlDoc = (new DOMParser()).parseFromString(response.responseText, "text");
-             //   let qualityEntry = xmlDoc.querySelector('table.table tbody tr');
-                if(qualityEntry == null) { return; } //Couldn't get a source URL. In future setup own dev account to handle this
-                let vidUrl = qualityEntry.querySelector('td a').href;
-                if(vidUrl.includes("#")) {
-
-                    vidUrl = xmlDoc.querySelector('video#video source').src;}
-                vidUrl = vidUrl.split('?')[0];
-                vids.set(id, vidUrl);
-                addDownloadButton(tweet, vidUrl, username);
-          };
 
         GM_xmlhttpRequest({
             method: "GET",
@@ -294,8 +303,9 @@ async function replaceVideoElement(tweet)
             },
            // overrideMimeType: "application/xml; charset=ISO-8859-1",
            // responseType: "document",
-            onload: onLoad
+            onload: function(response){ onLoadVideo((new DOMParser()).parseFromString(response.response, "text/html"), tweet, id, username); }
         });
+        vids.set(id, '');
         return true;
     } else { return false; }
 }
@@ -305,7 +315,7 @@ function mediaExists(tweet, tweetObserver)
     if(tweet == null || tweet.hasAttribute(modifiedAttr) /*|| (!onStatusPage() && tweet.querySelector('div[data-testid="placementTracking"]') == null)*/) { return false; } //If video, should have placementTracking after first mutation
    // LogMessage("media exists");
 
-    let video = tweet.querySelector('video');
+    const video = tweet.querySelector('video');
     if(video != null) //is video
     {
         tweetObserver.disconnect();
@@ -338,7 +348,7 @@ async function listenForMediaType(article, tweet)
 
   //  if(postRoot.querySelector('div[role="blockquote"]') != null) { LogMessage("bq"); return; } //Can't get the source post from the blockquote HTML, have to use Twitter API eventually
 
-    let tweetObserver = new MutationObserver((muteList, observer) => { mediaExists(tweet, observer); });
+    const tweetObserver = new MutationObserver((muteList, observer) => { mediaExists(tweet, observer); });
     if(mediaExists(tweet, tweetObserver)) { return; }
     tweetObserver.observe(tweet, argsChildAndSub);
 }
@@ -364,9 +374,9 @@ function watchForTimeline(main, timeline)
             {
                 progBarObserver.disconnect();
 
-                let tl = timeline.querySelector("DIV");
+                const tl = timeline.querySelector("DIV");
                 tl.setAttribute('timeline', "");
-                let childNodes = Array.from(tl.childNodes);
+                const childNodes = Array.from(tl.childNodes);
                 onTimelineChange(childNodes);
 
                 watchForAddedNodes(tl, false, argsChildAndSub, onTimelineChange);
@@ -379,7 +389,7 @@ function watchForTimeline(main, timeline)
 
 async function watchForAddedNodes(root, stopAfterFirstMutation, obsArguments, executeAfter)
 {
-    let rootObserver = new MutationObserver(
+    const rootObserver = new MutationObserver(
         function(mutations)
         {
             mutations.forEach(function(mutation) {
@@ -409,7 +419,7 @@ async function awaitElem(root, query, obsArguments)
      return new Promise((resolve, reject) =>
      {
          if(findElem(root, query, null, resolve)) { return; }
-         let rootObserver = new MutationObserver((mutes, obs) => { findElem(root, query, obs, resolve); } );
+         const rootObserver = new MutationObserver((mutes, obs) => { findElem(root, query, obs, resolve); } );
          rootObserver.observe(root, obsArguments);
     });
 }
@@ -454,10 +464,10 @@ async function onLayersChange(layers, mutation)
 {
     if(mutation.addedNodes != null && mutation.addedNodes.length > 0)
     {
-        let addedElems = Array.from(mutation.addedNodes);
-        let dialog = await awaitElem(addedElems[0], 'div[role="dialog"]', argsChildAndSub);
-        let img = await awaitElem(dialog, 'img[alt="Image"]', argsChildAndSub);
-        let list = dialog.querySelector('ul[role="list"]');
+        const addedElems = Array.from(mutation.addedNodes);
+        const dialog = await awaitElem(addedElems[0], 'div[role="dialog"]', argsChildAndSub);
+        const img = await awaitElem(dialog, 'img[alt="Image"]', argsChildAndSub);
+        const list = dialog.querySelector('ul[role="list"]');
 
         if(list != null)
         {
@@ -473,7 +483,7 @@ async function onLayersChange(layers, mutation)
 
 async function watchForChange(root, obsArguments, onChange)
 {
-    let rootObserver = new MutationObserver(function(mutations) {
+    const rootObserver = new MutationObserver(function(mutations) {
         mutations.forEach((mutation) => onChange(root, mutation));
     });
     rootObserver.observe(root, obsArguments);
@@ -485,7 +495,7 @@ function checkIfFileUrl(url)
     {
         if(!url.includes('name=orig'))
         {
-            let hqUrl = getHighQualityImage(url);
+            const hqUrl = getHighQualityImage(url);
             window.location.href = getHighQualityImage(url);
         }
         return true;
@@ -498,7 +508,7 @@ function checkIfFileUrl(url)
     if(checkIfFileUrl(window.location.href)) { return; }
 
     NodeList.prototype.forEach = Array.prototype.forEach;
-    let reactRoot = document.querySelector('div#react-root');
+    const reactRoot = document.querySelector('div#react-root');
     const main = await awaitElem(reactRoot, 'main[role="main"] div', argsChildAndSub);
     awaitElem(reactRoot, 'div#layers', argsChildAndSub).then((layers) => { watchForChange(layers, argsChildOnly, onLayersChange); });
     onMainChange(main);
