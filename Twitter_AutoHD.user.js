@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      0.43
+// @version      0.45
 // @description  Forces whole image to show on timeline and bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -287,7 +287,7 @@ LogMessage(link);
         const username = url.split('/status/')[0].split('/').pop();
         const cachedVidUrl = vids.get(id);
 
-        if(cachedVidUrl != null)
+        if(cachedVidUrl)
         {
             LogMessage(`used cached vid! : ${cachedVidUrl} id: ${id} url: ${url} username: ${username}`);
             addDownloadButton(tweet, cachedVidUrl, id, username);
