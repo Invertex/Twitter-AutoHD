@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      0.41
+// @version      0.43
 // @description  Forces whole image to show on timeline and bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -77,13 +77,13 @@ function download(url, filename)
     });
 }
 
-async function addDownloadButton(tweet, vidUrl, username)
+async function addDownloadButton(tweet, vidUrl, vidID, username)
 {
     const buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"]');
     if(buttonGrp == null || buttonGrp.querySelector('div#thd_dl') != null) { return; } //Button group doesn't exist or we already processed this element and added a DL button
 
     let filename = vidUrl.split('/').pop();
-    filename = username + ' - ' + filename;
+    filename = username + ' - ' + vidID;
 
     const dlBtn = buttonGrp.lastChild.cloneNode(true);
     dlBtn.id = "thd_dl";
@@ -252,7 +252,7 @@ function onLoadVideo (xmlDoc, tweetElem, vidID, username)
     vids.set(vidID, vidUrl);
 
     LogMessage("cache vid: " + vidID + ":" + vidUrl);
-    addDownloadButton(tweetElem, vidUrl, username);
+    addDownloadButton(tweetElem, vidUrl, vidID, username);
 };
 
 function getUrlFromTweet(tweet)
@@ -290,7 +290,7 @@ LogMessage(link);
         if(cachedVidUrl != null)
         {
             LogMessage(`used cached vid! : ${cachedVidUrl} id: ${id} url: ${url} username: ${username}`);
-            addDownloadButton(tweet, cachedVidUrl, username);
+            addDownloadButton(tweet, cachedVidUrl, id, username);
             return true;
         }
 
