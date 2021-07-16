@@ -624,7 +624,10 @@ async function onLayersChange(layers, mutation)
                 updateFullViewImage(listItem, tweetInfo);
             }
         }
-        else { updateFullViewImage(img, tweetInfo); }
+        else {
+            tweetInfo.elemIndex = -1;
+            updateFullViewImage(img, tweetInfo);
+        }
     }
 }
 
