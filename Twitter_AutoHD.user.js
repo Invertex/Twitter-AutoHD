@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      0.45
+// @version      0.47
 // @description  Forces whole image to show on timeline and bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -17,6 +17,7 @@
 // @require https://ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js
 // ==/UserScript==
 
+const cooky = getCookie("ct0");
 const requestUrl = 'https://www.savetweetvid.com/result?url=';
 const modifiedAttr = "THD_modified";
 const tweetQuery = 'div[data-testid="tweet"]';
@@ -33,7 +34,60 @@ const dlSVG = '<g><path d="M 8 51 C 5 54 5 48 5 42 L 5 -40 C 5 -45 -5 -45 -5 -40
 addGlobalStyle('@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }');
 addGlobalStyle('.loader { border: 16px solid #f3f3f373; display: flex; margin: auto; border-top: 16px solid #3498db99; border-radius: 50%; width: 120px; height: 120px; animation: spin 2s linear infinite;}');
 
-function LogMessage(text) { //console.log(text);
+addGlobalStyle('.context-menu { position: absolute; text-align: center; margin: 0px; background: #040404; border: 1px solid #0e0e0e; border-radius: 5px;}');
+addGlobalStyle('.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; list-style: none;}');
+addGlobalStyle('.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; user-select: none;}');
+addGlobalStyle('.context-menu ul li:hover { background: #0e0e0e;}');
+
+/* Old Twitter Layout example
+
+(function() {
+    'use strict';
+    function getCookie(name) {
+        var value = "; " + document.cookie;
+        var parts = value.split("; " + name + "=");
+        if (parts.length == 2) return parts.pop().split(";").shift();
+    }
+
+    if (navigator.userAgent !== "Mozilla/5.0 (Windows NT 6.3; Trident/7.0; rv:11.0) like Gecko") return alert("Please set your UserAgent to\nMozilla/5.0 (Windows NT 6.3; Trident/7.0; rv:11.0) like Gecko\nbefore using this script");
+
+    if (getCookie("rweb_optin") !== "off") {
+        console.log("Detected bad rweb_optin cookie");
+        document.cookie = "rweb_optin=off;secure;domain=twitter.com; path=/";
+        location.reload(true);
+    }
+})();
+*/
+
+/* Unused example of url replacement
+(function () {
+    "use strict";
+    var queryVars = function(str) {
+        return str.replace(/^\?/, '').split('&').map(x => x.split('=')).reduce((a, [k, v]) => { a[k] = v; return a; }, {});
+    };
+    // Check if this page contains a single image whose source is also the location.
+    var image = document.getElementsByTagName('img')[0];
+    if (image && image.getAttribute('src') == location.href) {
+        var pathname = location.pathname;
+        // Check if we already have the orig modifier
+        if (!pathname.match(/:orig$/)) {
+            // Trim modifiers.
+            var idx = pathname.lastIndexOf(':');
+            if (idx >= 0)
+                pathname = pathname.substr(0, idx);
+            // Check if we need to append the file type.
+            var format = queryVars(location.search).format;
+            if (format && !location.pathname.endsWith(format))
+                pathname += '.' + format;
+            // Add the modifier.
+            pathname += ':orig';
+            window.location = pathname;
+        }
+    }
+})();
+*/
+
+function LogMessage(text) { console.log(text);
 }
 
 function addGlobalStyle(css) {
@@ -77,13 +131,12 @@ function download(url, filename)
     });
 }
 
-async function addDownloadButton(tweet, vidUrl, vidID, username)
+async function addDownloadButton(tweet, vidUrl, tweetInfo)
 {
     const buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"]');
     if(buttonGrp == null || buttonGrp.querySelector('div#thd_dl') != null) { return; } //Button group doesn't exist or we already processed this element and added a DL button
 
-    let filename = vidUrl.split('/').pop();
-    filename = username + ' - ' + vidID;
+    const filename = filenameFromTweetInfo(tweetInfo);
 
     const dlBtn = buttonGrp.lastChild.cloneNode(true);
     dlBtn.id = "thd_dl";
@@ -138,13 +191,16 @@ function updateImgSrc(imgElem, bgElem, src)
     }
 };
 
-async function updateImageElement(imgLink, imgCnt)
+async function updateImageElement(tweetInfo, imgLink, imgCnt)
 {
     const imgContainer = await awaitElem(imgLink, 'div[aria-label="Image"]', argsChildAndSub);
     const img = await awaitElem(imgContainer, 'IMG', argsChildAndSub);
     const hqSrc = getHighQualityImage(img.src);
+
     const bg = imgContainer.querySelector('div[style^="background-image"]');
-    LogMessage(imgLink);
+   // LogMessage(imgLink);
+
+    addCustomCtxMenu(imgLink, hqSrc, tweetInfo);
 
     let naturalHeight = 0;
     let naturalWidth = 0;
@@ -195,15 +251,21 @@ async function updateImageElements(tweet, imgLinks)
     {
         let imgCnt = imgLinks.length;
         if(imgCnt == 0) { return; }
-        const padder = imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement.querySelector('div[style^="padding-bottom"]');
 
+        let tweetInfo = getTweetInfo(tweet);
+        const padder = imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement.querySelector('div[style^="padding-bottom"]');
         const images = [];
 
         for(let link = 0; link < imgCnt; link++)
         {
-            let imgData = await updateImageElement(imgLinks[link], imgCnt);
+            if(imgCnt > 1) {
+                tweetInfo = { ...tweetInfo }; //Shallow copy to avoid changing the data for another image
+                tweetInfo.elemIndex = link + 1; //Set our element index so we can add it to our filename later to differentiate the multi-images of a post ID
+            }
+            let imgData = await updateImageElement(tweetInfo, imgLinks[link], imgCnt);
             images.push(imgData);
         }
+
         imgCnt = images.length;
         let ratio = 100;
 
@@ -242,21 +304,11 @@ async function updateImageElements(tweet, imgLinks)
     }
 }
 
-function onLoadVideo (xmlDoc, tweetElem, vidID, username)
-{
-    const qualityEntry = xmlDoc.querySelector('table.table tbody tr'); //First quality entry will be highest
-    if(qualityEntry == null) { return; } //Couldn't get a source URL. In future setup own dev account to handle this
-    let vidUrl = qualityEntry.querySelector('td a').href;
-    if(vidUrl.includes("#")) { vidUrl = xmlDoc.querySelector('video#video source').src; }
-    vidUrl = vidUrl.split('?')[0];
-    vids.set(vidID, vidUrl);
-
-    LogMessage("cache vid: " + vidID + ":" + vidUrl);
-    addDownloadButton(tweetElem, vidUrl, vidID, username);
-};
-
 function getUrlFromTweet(tweet)
 {
+    let curBrowserUrl = window.location.href;
+    if(curBrowserUrl.includes('/photo/')) { return curBrowserUrl; } //Probably viewing full-screen image
+
     let article = tweet.closest('article');
     if(article == null) { return null; }
 
@@ -267,45 +319,86 @@ function getUrlFromTweet(tweet)
     }
     if(linkElem) { return linkElem.href; }
 
-    let curBrowserUrl = window.location.href;
-    if(curBrowserUrl.includes('/status/')) { return curBrowserUrl; }
+    if(curBrowserUrl.includes('/status/')) { return curBrowserUrl; } //Last resort, not guranteed to actually be for the element in the timeline we are processing
     return null;
 }
+
+function getTweetInfo(tweet)
+{
+    let link = getUrlFromTweet(tweet);
+    if(link == null) { return null; }
+    //LogMessage(link);
+
+    let url = link.split('?')[0];
+    let photoUrl = url.split('/photo/');
+    url = photoUrl[0];
+
+    const id = url.split('/').pop();
+    const username = url.split('/status/')[0].split('/').pop();
+
+    let elementIndex = -1;
+    if(photoUrl.length > 1) { elementIndex = parseInt(photoUrl[1]); LogMessage(url + " : " + photoUrl[1]);}
+
+    return { id: id, url: url, username: username, elemIndex: elementIndex }
+}
+
+function filenameFromTweetInfo(tweetInfo)
+{
+    let filename = tweetInfo.username + ' - ' + tweetInfo.id;
+    if(tweetInfo.elemIndex >= 0) { filename += '_' + tweetInfo.elemIndex.toString();}
+    return filename;
+}
+
+function onLoadVideo (xmlDoc, tweetElem, tweetInfo)
+{
+    const qualityEntry = xmlDoc.querySelector('table.table tbody tr'); //First quality entry will be highest
+    if(qualityEntry == null) { return; } //Couldn't get a source URL. In future setup own dev account to handle this
+    let vidUrl = qualityEntry.querySelector('td a').href;
+    if(vidUrl.includes("#")) { vidUrl = xmlDoc.querySelector('video#video source').src; }
+    vidUrl = vidUrl.split('?')[0];
+    vids.set(tweetInfo.id, vidUrl);
+   // LogMessage(tweetElem);
+    LogMessage("cache vid: " + tweetInfo.id + ":" + vidUrl);
+    addDownloadButton(tweetElem, vidUrl, tweetInfo.id, tweetInfo.username);
+};
 
 async function replaceVideoElement(tweet)
 {
     if(tweet != null && !addHasAttribute(tweet, modifiedAttr))
     {
+		const tweetInfo = getTweetInfo(tweet);
+        if(tweetInfo == null) { return false; }
 
-		let link = getUrlFromTweet(tweet);
-        if(link == null) { return false; }
-LogMessage(link);
-		const url = link.split('?')[0]
-      //  url = url.split('?')[0];
-
-        const id = url.split('/').pop();
-        const username = url.split('/status/')[0].split('/').pop();
-        const cachedVidUrl = vids.get(id);
+        const cachedVidUrl = vids.get(tweetInfo.id);
 
         if(cachedVidUrl)
         {
-            LogMessage(`used cached vid! : ${cachedVidUrl} id: ${id} url: ${url} username: ${username}`);
-            addDownloadButton(tweet, cachedVidUrl, id, username);
+            LogMessage(`used cached vid! : ${cachedVidUrl} id: ${tweetInfo.id} url: ${tweetInfo.url} username: ${tweetInfo.username}`);
+            addDownloadButton(tweet, cachedVidUrl, tweetInfo);
             return true;
         }
 
+        const vidUrl = await getVidURL(tweetInfo.id);
+        if(vidUrl) //Was able to grab URL using legacy Twitter API and user token
+        {
+            LogMessage(`found vid! : ${vidUrl} id: ${tweetInfo.id} url: ${tweetInfo.url} username: ${tweetInfo.username}`);
+            addDownloadButton(tweet, vidUrl, tweetInfo);
+            return true;
+        }
+
+        //Previous methods failed, use an external service for grabbing the video.
         GM_xmlhttpRequest({
             method: "GET",
-            url: requestUrl + url,
+            url: requestUrl + tweetInfo.url,
             headers: {
                 "User-Agent": "Mozilla/5.0",
                 "Accept": "text/html"
             },
            // overrideMimeType: "application/xml; charset=ISO-8859-1",
            // responseType: "document",
-            onload: function(response){ onLoadVideo((new DOMParser()).parseFromString(response.response, "text/html"), tweet, id, username); }
+            onload: function(response){ onLoadVideo((new DOMParser()).parseFromString(response.response, "text/html"), tweet, tweetInfo); }
         });
-        vids.set(id, '');
+        vids.set(tweetInfo.id, '');
         return true;
     } else { return false; }
 }
@@ -313,7 +406,6 @@ LogMessage(link);
 function mediaExists(tweet, tweetObserver)
 {
     if(tweet == null || tweet.hasAttribute(modifiedAttr) /*|| (!onStatusPage() && tweet.querySelector('div[data-testid="placementTracking"]') == null)*/) { return false; } //If video, should have placementTracking after first mutation
-   // LogMessage("media exists");
 
     const video = tweet.querySelector('video');
     if(video != null) //is video
@@ -344,7 +436,7 @@ function mediaExists(tweet, tweetObserver)
 
 async function listenForMediaType(article, tweet)
 {
-    if(addHasAttribute(tweet, "thdObserver")) { return; }
+    if(addHasAttribute(tweet, "thd_observing")) { return; }
 
   //  if(postRoot.querySelector('div[role="blockquote"]') != null) { LogMessage("bq"); return; } //Can't get the source post from the blockquote HTML, have to use Twitter API eventually
 
@@ -365,25 +457,39 @@ function onTimelineChange(addedNodes)
     });
 }
 
-function watchForTimeline(main, timeline)
+async function watchForTimeline(primaryColumn, section)
 {
-    let progBarObserver = new MutationObserver(
-        function(mutations)
+    const checkTimeline = async function(){
+
+     let tl = section.querySelector("DIV");
+if(tl != null) { LogMessage("Found timeline"); }
+        let progBar = tl.querySelector('[role="progressbar"]');
+        if(progBar)
         {
-            if(timeline.querySelector('[role="progressbar"]') == null)
+            LogMessage("prog bar");
+            let art = await awaitElem(section, "article", {childCount: true, subtree: true, attributes: true});
+                        LogMessage("founnd article");
+        }
+
+            if(/*section.querySelector('div')?.querySelector('[role="progressbar"]') == null &&*/ !addHasAttribute(tl, "thd_observing_timeline"))
             {
-                progBarObserver.disconnect();
+                LogMessage("Found Timeline content");
+             //   progBarObserver.disconnect();
+                tl = tl.querySelector('div');
+                if(!addHasAttribute(tl, "thd_observing_timeline"))
+                {
+                    const childNodes = Array.from(tl.childNodes);
+                    onTimelineChange(childNodes);
 
-                const tl = timeline.querySelector("DIV");
-                tl.setAttribute('timeline', "");
-                const childNodes = Array.from(tl.childNodes);
-                onTimelineChange(childNodes);
-
-                watchForAddedNodes(tl, false, argsChildAndSub, onTimelineChange);
+                    watchForAddedNodes(tl, false, {attributes: true, childList: true, subtree: true}, onTimelineChange);
+                }
             }
-        });
+    };
 
-    progBarObserver.observe(timeline, argsChildAndSub);
+    checkTimeline();
+
+    let progBarObserver = new MutationObserver((mutations) => {checkTimeline();});
+    progBarObserver.observe(section, argsChildAndSub);
 }
 
 
@@ -392,6 +498,7 @@ async function watchForAddedNodes(root, stopAfterFirstMutation, obsArguments, ex
     const rootObserver = new MutationObserver(
         function(mutations)
         {
+          //  LogMessage("timeline mutated");
             mutations.forEach(function(mutation) {
                 if(mutation.addedNodes == null || mutation.addedNodes.length == 0) { return; }
                 if(stopAfterFirstMutation) { rootObserver.disconnect(); }
@@ -440,22 +547,31 @@ function onStatusPage() { return document.location.href.includes('/status/'); }
 
 function onMainChange(main, mutations)
 {
+
     let primaryColumn = main.querySelector('div[data-testid="primaryColumn"]');
+     LogMessage("Main changed");
     if(primaryColumn != null)
     {
-        if(addHasAttribute(primaryColumn, modifiedAttr)) { return; }
-        awaitElem(primaryColumn, 'section[role="region"] > div', argsChildAndSub).then((section) => { watchForTimeline(primaryColumn, section); });
+        LogMessage("Has primary column");
 
-    } else if(onStatusPage())
+        if(addHasAttribute(primaryColumn, modifiedAttr)) { return; }
+             LogMessage("Has primary column unmodified");
+        awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => { LogMessage("region found"); watchForTimeline(primaryColumn, section); });
+
+    }
+    if(onStatusPage())
     {
+        LogMessage("on status page");
         awaitElem(main, tweetQuery, argsChildAndSub).then((tweet) => { listenForMediaType(main, tweet.parentElement); });
     }
 }
 
-async function updateFullViewImage(img)
+async function updateFullViewImage(img, tweetInfo)
 {
+   /// if(addHasAttribute(img, "thd_modified")) { return; }
     let bg = img.parentElement.querySelector('div');
     let hqSrc = getHighQualityImage(img.src);
+    addCustomCtxMenu(img, hqSrc, tweetInfo);
     updateImgSrc(img, bg, hqSrc);
     doOnAttributeChange(img, (imgElem) => {updateImgSrc(imgElem, bg, hqSrc);}, false);
 }
@@ -468,16 +584,22 @@ async function onLayersChange(layers, mutation)
         const dialog = await awaitElem(addedElems[0], 'div[role="dialog"]', argsChildAndSub);
         const img = await awaitElem(dialog, 'img[alt="Image"]', argsChildAndSub);
         const list = dialog.querySelector('ul[role="list"]');
+        let tweetInfo = getTweetInfo(img);
 
-        if(list != null)
+        if(list != null && !addHasAttribute(list, 'thd_modified'))
         {
-            let listItems = list.querySelectorAll('li');
+            const listItems = list.querySelectorAll('li');
+            const itemCnt = listItems.length;
 
-            listItems.forEach((panel) => {
-                awaitElem(panel, 'img[alt="Image"]', argsChildAndSub)
-                    .then((img) => updateFullViewImage(img)); });
+            for(let i = 0; i < itemCnt; i++)
+            {
+                let listItem = await awaitElem(listItems[i], 'img[alt="Image"]', argsChildAndSub);
+                tweetInfo = { ...tweetInfo };
+                tweetInfo.elemIndex = i + 1;
+                updateFullViewImage(listItem, tweetInfo);
+            }
         }
-        else { updateFullViewImage(img); }
+        else { updateFullViewImage(img, tweetInfo); }
     }
 }
 
@@ -489,7 +611,7 @@ async function watchForChange(root, obsArguments, onChange)
     rootObserver.observe(root, obsArguments);
 }
 
-function checkIfFileUrl(url)
+function isDirectImagePage(url) //Checks if webpage we're on is a direct image view
 {
     if(url.includes('/media/') && url.includes('format=') && url.includes('name='))
     {
@@ -503,13 +625,134 @@ function checkIfFileUrl(url)
     return false;
 }
 
+/** RIGHT-CLICK CONTEXT MENU STUFF START **/
+
+const ctxMenu = document.createElement('div');
+ctxMenu.id = "contextMenu";
+ctxMenu.className = "context-menu";
+setContextMenuVisible(false);
+
+const ctxMenuList = document.createElement('ul');
+ctxMenu.appendChild(ctxMenuList);
+
+const ctxMenuOpenInNewTab = createCtxMenuItem(ctxMenuList, "Open Image in New Tab");
+const ctxMenuSaveAs = createCtxMenuItem(ctxMenuList, "Save Image As");
+const ctxMenuCopyAddress = createCtxMenuItem(ctxMenuList, "Copy Image Address");
+const ctxMenuGRIS = createCtxMenuItem(ctxMenuList, "Search Google for Image");
+
+document.body.appendChild(ctxMenu);
+document.body.addEventListener('click', function(e) { setContextMenuVisible(false); });
+
+function createCtxMenuItem(menuList, text)
+{
+    let menuItem = document.createElement('LI');
+    menuItem.innerText = text;
+    menuList.appendChild(menuItem);
+    return menuItem;
+}
+
+function mouseX(evt) {
+  if (evt.pageX) {
+    return evt.pageX;
+  } else if (evt.clientX) {
+    return evt.clientX + (document.documentElement.scrollLeft ?
+      document.documentElement.scrollLeft :
+      document.body.scrollLeft);
+  } else {
+    return null;
+  }
+}
+function mouseY(evt) {
+  if (evt.pageY) {
+    return evt.pageY;
+  } else if (evt.clientY) {
+    return evt.clientY + (document.documentElement.scrollTop ?
+      document.documentElement.scrollTop :
+      document.body.scrollTop);
+  } else {
+    return null;
+  }
+}
+
+function setContextMenuVisible(visible)
+{
+    ctxMenu.style.display = visible ? "block" : "none";
+}
+
+function updateContextMenuLink(dlURL, tweetInfo)
+{
+    ctxMenuSaveAs.onclick = () => { setContextMenuVisible(false); download(dlURL, filenameFromTweetInfo(tweetInfo)) };
+    ctxMenuOpenInNewTab.onclick = () => { setContextMenuVisible(false); window.open(dlURL); };
+    ctxMenuCopyAddress.onclick = () => { setContextMenuVisible(false); navigator.clipboard.writeText(dlURL); };
+    ctxMenuGRIS.onclick = () => { setContextMenuVisible(false); window.open("https://images.google.com/searchbyimage?image_url=" + dlURL); };
+}
+
+function addCustomCtxMenu(elem, dlLink, tweetInfo)
+{
+    elem.addEventListener('contextmenu', function(e)
+    {
+        if(ctxMenu.style.display == "block") { e.preventDefault(); setContextMenuVisible(false); }
+        else
+        {
+            updateContextMenuLink(dlLink, tweetInfo);
+            setContextMenuVisible(true);
+            ctxMenu.style.left = mouseX(e) + "px";
+            ctxMenu.style.top = mouseY(e) + "px";
+            e.preventDefault();
+        }
+    }, false);
+}
+/** RIGHT-CLICK CONTEXT MENU STUFF END **/
+
+function getVidURL(id)
+{
+    return new Promise((resolve, reject) =>
+    {
+        var init =
+        {
+            origin: 'https://mobile.twitter.com',
+            headers: {
+                "Accept": '*/*',
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:66.0) Gecko/20100101 Firefox/66.0",
+                "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+                "x-csrf-token": cooky,
+            },
+            credentials: 'include',
+            referrer: 'https://mobile.twitter.com'
+        };
+
+        fetch("https://api.twitter.com/1.1/statuses/show.json?include_profile_interstitial_type=1&include_blocking=1&include_blocked_by=1&include_followed_by=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&skip_status=1&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&include_reply_count=1&tweet_mode=extended&trim_user=false&include_ext_media_color=true&id=" + id,
+              init)
+            .then((response) =>
+            {
+                if (response.status == 200)
+                {
+                    response.json().then((json) =>
+                    {
+                        let mp4Variants = json.extended_entities.media[0].video_info.variants.filter(variant => variant.content_type === 'video/mp4');
+                        mp4Variants = mp4Variants.sort((a, b) => (b.bitrate - a.bitrate));
+                        resolve((mp4Variants.length) ? mp4Variants[0].url : null);
+                    });
+                } else { resolve(null); }
+            }).catch((err) => { reject({ error: err }); });
+    });
+}
+
+function getCookie(name)
+{
+    var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    if(match) { return match[2].toString(); }
+    return null;
+}
+
 (async function() {
     'use strict';
-    if(checkIfFileUrl(window.location.href)) { return; }
+    if(isDirectImagePage(window.location.href)) { return; }
 
     NodeList.prototype.forEach = Array.prototype.forEach;
     const reactRoot = document.querySelector('div#react-root');
     const main = await awaitElem(reactRoot, 'main[role="main"] div', argsChildAndSub);
+
     awaitElem(reactRoot, 'div#layers', argsChildAndSub).then((layers) => { watchForChange(layers, argsChildOnly, onLayersChange); });
     onMainChange(main);
     watchForChange(main, argsChildOnly, onMainChange);
