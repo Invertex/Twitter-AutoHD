@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.19
+// @version      1.21
 // @description  Forces whole image to show on timeline and bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -682,14 +682,17 @@ function getMediaFormat(url)
     let periodSplit = end.split('.');
     if(periodSplit.length > 1)
     {
-        return '.' + periodSplit.pop();
+        return '.' + periodSplit.pop().split('?')[0];
     }
     if(url.includes('format='))
     {
         let params = url.split('?').pop().split('&');
         for(let p = 0; p < params.length; p++)
         {
-            if(params[p].includes('format')) { return '.' + params[p].split('=').pop(); }
+            if(params[p].includes('format'))
+            { 
+                return '.' + params[p].split('=').pop().split('?')[0];
+            }
         }
     }
 
