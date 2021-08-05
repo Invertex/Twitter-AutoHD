@@ -1,8 +1,16 @@
 # Twitter AutoHD
-Automatically makes Twitter load the highest resolution of video or image.<br/>
-Also adds a download button for them on the tweet buttons bar (won't work on retweets for now, go to original post first).
-Images will also layout in full view automatically if possible, or show as much as possible for multi-image layouts.
+-Automatically makes Twitter load the highest resolution of video or image.<br/> 
+***(even if the image isn't expanded to full view, it will be highest quality, including when saving it)<br/>
+-Also adds a download button for them on the tweet buttons bar (won't work on retweets for now, go to original post first).<br/>
+-Images will also layout in full view automatically if possible, or show as much as possible for multi-image layouts.<br/>
 
+A custom context menu is also made when right-clicking an image. This ensures a descriptive filename when saving, like this:</br>
+`username - postStatusNum_imgNum.jpg`
+
+This ensures that your saved images always have the name of who posted the content, including the status number you can use to get the exact tweet it was from.<br/>
+For posts with multiple images, it will also tack on the number that image was in the post.
+
+Example of video download button:<br/>
 <img src="https://i.gyazo.com/3ef79354c0f4ef8b0a8106d377501cc4.gif"/>
 
 # Installation
