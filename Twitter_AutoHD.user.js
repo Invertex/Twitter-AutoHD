@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.15
+// @version      1.19
 // @description  Forces whole image to show on timeline and bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download option.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -77,7 +77,7 @@ function addGlobalStyle(css) {
 function download(url, filename)
 {
     GM_download({
-        name: filename,
+        name: filename + getMediaFormat(url),
         url: url,
         onload: function() { /*LogMessage(`Downloaded ${url}!`);*/}
     });
@@ -87,7 +87,6 @@ async function addDownloadButton(tweet, vidUrl, tweetInfo)
 {
     const buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"]');
     if(buttonGrp == null || buttonGrp.querySelector('div#thd_dl') != null) { return; } //Button group doesn't exist or we already processed this element and added a DL button
-
     const filename = filenameFromTweetInfo(tweetInfo);
 
     const dlBtn = buttonGrp.lastChild.cloneNode(true);
@@ -132,8 +131,8 @@ function getUrlFromTweet(tweet)
     let article = tweet.closest('article');
     if(article == null) { return null; }
 
-    let postLink = article.querySelector('a:not([href$="/retweets"],[href$="/likes"])[href*="/status/"][role="link"][dir="auto"]');
-    let imgLink = article.querySelector('a:not([href$="/retweets"],[href$="/likes"],[dir="auto"])[href*="/status/"][role="link"]');
+    let postLink = article.querySelector('a:not([href*="/retweets"],[href$="/likes"])[href*="/status/"][role="link"][dir="auto"]');
+    let imgLink = article.querySelector('a:not([href*="/retweets"],[href$="/likes"],[dir="auto"])[href*="/status/"][role="link"]');
 
     if(imgLink)
     {
@@ -675,6 +674,26 @@ async function watchForChange(root, obsArguments, onChange)
         mutations.forEach((mutation) => onChange(root, mutation));
     });
     rootObserver.observe(root, obsArguments);
+}
+//Because Firefox doesn't assume the format unlike Chrome...
+function getMediaFormat(url)
+{
+    let end = url.split('/').pop();
+    let periodSplit = end.split('.');
+    if(periodSplit.length > 1)
+    {
+        return '.' + periodSplit.pop();
+    }
+    if(url.includes('format='))
+    {
+        let params = url.split('?').pop().split('&');
+        for(let p = 0; p < params.length; p++)
+        {
+            if(params[p].includes('format')) { return '.' + params[p].split('=').pop(); }
+        }
+    }
+
+    return '';
 }
 
 function isDirectImagePage(url) //Checks if webpage we're on is a direct image view
