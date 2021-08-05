@@ -79,7 +79,7 @@ function download(url, filename)
     GM_download({
         name: filename,
         url: url,
-        onload: function() { LogMessage(`Downloaded ${url}!`); }
+        onload: function() { /*LogMessage(`Downloaded ${url}!`);*/}
     });
 }
 
@@ -126,20 +126,25 @@ function isOnStatusPage() { return document.location.href.includes('/status/'); 
 
 function getUrlFromTweet(tweet)
 {
-    let curBrowserUrl = window.location.href;
-    if(curBrowserUrl.includes('/photo/')) { return curBrowserUrl; } //Probably viewing full-screen image
+    let curUrl = window.location.href;
+    if(curUrl.includes('/photo/')) { return curUrl; } //Probably viewing full-screen image
 
     let article = tweet.closest('article');
     if(article == null) { return null; }
 
-    let linkElem = article.querySelector('div[dir="auto"] > a:not([href$="/retweets"],[href$="/likes"])[href*="/status/"][role="link"]');
-    if(linkElem == null)
-    {
-        linkElem = article.querySelector('a:not([href$="/retweets"],[href$="/likes"])[href*="/status/"][role="link"][dir="auto"]');
-    }
-    if(linkElem) { return linkElem.href; }
+    let postLink = article.querySelector('a:not([href$="/retweets"],[href$="/likes"])[href*="/status/"][role="link"][dir="auto"]');
+    let imgLink = article.querySelector('a:not([href$="/retweets"],[href$="/likes"],[dir="auto"])[href*="/status/"][role="link"]');
 
-    if(curBrowserUrl.includes('/status/')) { return curBrowserUrl; } //Last resort, not guranteed to actually be for the element in the timeline we are processing
+    if(imgLink)
+    {
+        let statusLink = imgLink.href.split('/photo/')[0];
+        let imgUser = statusLink.split('/status/')[0];
+        if(postLink == null || !postLink.href.includes(imgUser)) { return statusLink; }
+    }
+
+    if(postLink) { return postLink.href; }
+
+    if(curUrl.includes('/status/')) { return curUrl; } //Last resort, not guranteed to actually be for the element in the timeline we are processing
     return null;
 }
 
@@ -157,7 +162,7 @@ function getTweetInfo(tweet)
     let username = url.split('/status/')[0].split('/').pop();
 let attributeTo = tweet.querySelector('div[aria-label]');
     let elementIndex = -1;
-    if(photoUrl.length > 1) { elementIndex = parseInt(photoUrl[1]); LogMessage(url + " : " + photoUrl[1]);}
+    if(photoUrl.length > 1) { elementIndex = parseInt(photoUrl[1]); LogMessage(url + " : " + photoUrl[1]); }
 
     return { id: id, url: url, username: username, elemIndex: elementIndex }
 }
@@ -270,20 +275,43 @@ async function updateImageElements(tweet, imgLinks)
         imgCnt = images.length;
         let ratio = 100;
 
-        if(imgCnt == 1 || (imgCnt == 2 && images[0].flex == "column"))
+        if(imgCnt == 1)
         {
             ratio = (images[0].height / images[0].width) * 100;
         }
-        else if(imgCnt == 2 && images[0].flex == "row")
+        else if(imgCnt == 2)
         {
             let img1 = images[0]; let img2 = images[1];
-            ratio = img1.height / (img1.width);
-            ratio *= 100;
-            ratio *= 0.5;
-            img1.bgElem.style.backgroundSize = "contain";
-            img2.bgElem.style.backgroundSize = "cover";
-            img1.layoutContainer.removeAttribute("style");
-            img2.layoutContainer.removeAttribute("style");
+            let img1Ratio = img1.height / img1.width;
+            let img2Ratio = img2.height / img2.width;
+            var imgToRatio = img1Ratio > img2Ratio ? img1 : img2;
+
+            if(img1.flex == "row")
+            {
+                ratio = (imgToRatio.height / imgToRatio.width) * 100;
+
+                if(imgToRatio.height > imgToRatio.width)
+                {
+                       ratio *= imgToRatio.width / imgToRatio.height;
+                }
+                else
+                {
+                   ratio *= 0.5;
+               }
+
+                img1.bgElem.style.backgroundSize = "cover";
+                img2.bgElem.style.backgroundSize = "cover";
+                img1.layoutContainer.removeAttribute("style");
+                img2.layoutContainer.removeAttribute("style");
+            }
+            else
+            {
+                ratio = (imgToRatio.height / imgToRatio.width) * 100;
+                img1.bgElem.style.backgroundSize = "contain";
+                img2.bgElem.style.backgroundSize = "cover";
+                img1.layoutContainer.removeAttribute("style");
+                img2.layoutContainer.removeAttribute("style");
+            }
         }
         else if(imgCnt == 3 && images[0].flex == "row")
         {
@@ -299,7 +327,7 @@ async function updateImageElements(tweet, imgLinks)
                && images[3].width > images[3].height) { return; } //All-wide 4-panel already has an optimal layout by default.
         }
 
-        padder.style = `padding-bottom: ${ratio}%;`;
+        padder.style = `padding-bottom: ${ratio}%; padding-top: 0px`;
         padder.setAttribute("modifiedPadding","");
         doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + ratio + "%;";} )
     }
@@ -330,11 +358,14 @@ function getVidURL(id)
                 {
                     response.json().then((json) =>
                     {
-                        let mp4Variants = json.extended_entities.media[0].video_info.variants.filter(variant => variant.content_type === 'video/mp4');
+                        let entities = json.extended_entities;
+                        if(entities == undefined || entities == null) { resolve(null); }
+                        let mp4Variants = entities.media[0].video_info.variants.filter(variant => variant.content_type === 'video/mp4');
                         mp4Variants = mp4Variants.sort((a, b) => (b.bitrate - a.bitrate));
                         resolve((mp4Variants.length) ? mp4Variants[0].url : null);
                     });
-                } else { resolve(null); }
+                }
+                else { resolve(null); }
             }).catch((err) => { reject({ error: err }); });
     });
 }
@@ -599,7 +630,7 @@ async function onMainChange(main, mutations)
 
 async function updateFullViewImage(img, tweetInfo)
 {
-   /// if(addHasAttribute(img, "thd_modified")) { return; }
+    if(addHasAttribute(img, "thd_modified")) { return; }
     let bg = img.parentElement.querySelector('div');
     let hqSrc = getHighQualityImage(img.src);
     addCustomCtxMenu(img, hqSrc, tweetInfo);
@@ -617,7 +648,7 @@ async function onLayersChange(layers, mutation)
         const list = dialog.querySelector('ul[role="list"]');
         let tweetInfo = getTweetInfo(img);
 
-        if(list != null && !addHasAttribute(list, 'thd_modified'))
+        if(list != null/* && !addHasAttribute(list, 'thd_modified')*/)
         {
             const listItems = list.querySelectorAll('li');
             const itemCnt = listItems.length;
@@ -630,7 +661,8 @@ async function onLayersChange(layers, mutation)
                 updateFullViewImage(listItem, tweetInfo);
             }
         }
-        else {
+        else
+        {
             tweetInfo.elemIndex = -1;
             updateFullViewImage(img, tweetInfo);
         }
@@ -723,6 +755,7 @@ function updateContextMenuLink(dlURL, tweetInfo)
 
 function addCustomCtxMenu(elem, dlLink, tweetInfo)
 {
+    if(addHasAttribute(elem, "thd_customctx")) { return; }
     elem.addEventListener('contextmenu', function(e)
     {
         if(ctxMenu.style.display == "block") { e.preventDefault(); setContextMenuVisible(false); }
@@ -745,15 +778,25 @@ function getCookie(name)
     return null;
 }
 
+function getReactRoot()
+{
+    return document.querySelector('div#react-root');
+}
+
 (async function() {
     'use strict';
     if(isDirectImagePage(window.location.href)) { return; }
 
     NodeList.prototype.forEach = Array.prototype.forEach;
-    const reactRoot = document.querySelector('div#react-root');
+    const reactRoot = getReactRoot();
     const main = await awaitElem(reactRoot, 'main[role="main"] div', argsChildAndSub);
-addHasAttribute(main, modifiedAttr);
-    awaitElem(reactRoot, 'div#layers', argsChildAndSub).then((layers) => { watchForChange(layers, argsChildOnly, onLayersChange); });
+      let layers = getReactRoot().querySelector('div#layers');
+    if(layers) { LogMessage("Found Layers"); }
+    awaitElem(getReactRoot(), 'div#layers', argsChildAndSub).then((layers) => {
+        if(!addHasAttribute(layers, "watchingLayers")) { watchForChange(layers, {childList: true, subtree: true}, onLayersChange); }
+    });
+
+    addHasAttribute(main, modifiedAttr);
     onMainChange(main);
     watchForChange(main, argsChildOnly, onMainChange);
 })();
