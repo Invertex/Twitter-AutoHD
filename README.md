@@ -7,8 +7,10 @@
 A custom context menu is also made when right-clicking an image. This ensures a descriptive filename when saving, like this:</br>
 `username - postStatusNum_imgNum.jpg`
 
-This ensures that your saved images always have the name of who posted the content, including the status number you can use to get the exact tweet it was from.<br/>
+This ensures that your saved images always have the name of who posted the content, including the status number which you can use to get the exact tweet it was from.<br/>
 For posts with multiple images, it will also tack on the number that image was in the post.
+
+<b>This should also greatly help with keeping your image folder organized :)</b>
 
 Example of video download button:<br/>
 <img src="https://i.gyazo.com/3ef79354c0f4ef8b0a8106d377501cc4.gif"/>
