@@ -192,7 +192,7 @@ function updateImgSrc(imgElem, bgElem, src)
 
 async function updateImageElement(tweetInfo, imgLink, imgCnt)
 {
-    const imgContainer = await awaitElem(imgLink, 'div[aria-label="Image"]', argsChildAndSub);
+    const imgContainer = await awaitElem(imgLink, 'div[aria-label="Image"], div[data-testid="tweetPhoto"]', argsChildAndSub);
     const img = await awaitElem(imgContainer, 'IMG', argsChildAndSub);
     const hqSrc = getHighQualityImage(img.src);
 
@@ -207,7 +207,6 @@ async function updateImageElement(tweetInfo, imgLink, imgCnt)
     img.setAttribute(modifiedAttr, "");
     updateImgSrc(img, bg, hqSrc);
     doOnAttributeChange(img, (imgElem) => updateImgSrc(imgElem, bg, hqSrc));
-
     if(!img.complete || img.naturalHeight == 0) { await waitForImgLoad(img); }
     naturalHeight = img.naturalHeight; naturalWidth = img.naturalWidth;
 /*
@@ -251,7 +250,7 @@ async function updateImageElements(tweet, imgLinks)
         let imgCnt = imgLinks.length;
         if(imgCnt == 0) { return; }
 
-        addHasAttribute(imgLinks[0], modifiedAttr);
+        if(addHasAttribute(imgLinks[0], modifiedAttr)) { return; }
 
         let tweetInfo = getTweetInfo(tweet);
         const padder = imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement.querySelector('div[style^="padding-bottom"]');
@@ -259,7 +258,8 @@ async function updateImageElements(tweet, imgLinks)
 
         for(let link = 0; link < imgCnt; link++)
         {
-            if(imgCnt > 1) {
+            if(imgCnt > 1)
+            {
                 tweetInfo = { ...tweetInfo }; //Shallow copy to avoid changing the data for another image
                 tweetInfo.elemIndex = link + 1; //Set our element index so we can add it to our filename later to differentiate the multi-images of a post ID
             }
@@ -421,11 +421,17 @@ function mediaExists(tweet, tweetObserver)
 
     allLinks.forEach((imgLink) =>
     {
-        if(imgLink.href.includes('/photo/') /*&& imgLink.closest('div[tabindex][role="link"]') == null && imgLink.querySelector('div[data-testid="tweetPhoto"]') != null*/)
+        let href = imgLink.href;
+        if(href.includes('/photo/') /*&& imgLink.closest('div[tabindex][role="link"]') == null && imgLink.querySelector('div[data-testid="tweetPhoto"]') != null*/)
         {
             if(imgLink.closest('div[tabindex][role="link"]') != null) { quoteImgLinks.push(imgLink); }
             else { imgLinks.push(imgLink); }
         }
+     /*   else if(href.includes('t.co/')) //External website link
+        {
+            let img = imgLink.querySelector('img[src*="/card_img/"]');
+            if(img) { quoteImgLinks.push(imgLink); LogMessage("Found card imag");}
+        }*/
     });
 
     let foundImages = false;
@@ -460,7 +466,7 @@ async function listenForMediaType(article, tweet)
 
 function onTimelineChange(addedNodes)
 {
-    LogMessage("on timeline change");
+    //LogMessage("on timeline change");
     if(addedNodes.length == 0 ) { LogMessage("no added nodes"); return; }
     addedNodes.forEach((child) =>
     {
