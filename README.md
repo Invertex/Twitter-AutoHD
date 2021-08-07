@@ -24,7 +24,7 @@ Video download button:<br/>
 Image layout:
 Original           |  Twitter AutoHD
 :-------------------------:|:-------------------------:
-![](https://i.gyazo.com/2909e7fe7093ffd8367e91fed06e6cce.png)  |  ![](https://i.gyazo.com/e761fb75c7eb548aba1ffc7812f2a599.png)
-![](https://i.gyazo.com/9a5f9a2a9ef8ceae1bc292d862b76d3e.png)  |  ![](https://i.gyazo.com/9f72ac86634eab7f0ec65acd68fc60fe.png)
-![](https://i.gyazo.com/03a8eab3af9f42f826f7fe033b007b3b.png)  |  ![](https://i.gyazo.com/93a889e35095e46e725717d2430e051f.png)
-![](https://i.gyazo.com/6c58c472c25a7654b9b20e03a744abf7.png)  |  ![](https://i.gyazo.com/1a33e763437cd1e2333f7e01619806a4.png)
+![](https://i.imgur.com/cjxXqNt.png)  |  ![](https://i.imgur.com/qsy98iZ.png)
+![](https://i.imgur.com/4G9j1LV.png)  |  ![](https://i.imgur.com/feLZjrV.png)
+![](https://i.imgur.com/58WQ11V.png)  |  ![](https://i.imgur.com/NmGJ0mS.png)
+![](https://i.imgur.com/ktsufiJ.png)  |  ![](https://i.imgur.com/lneHyqo.png)
