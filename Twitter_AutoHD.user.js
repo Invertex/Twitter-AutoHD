@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.21
+// @version      1.23
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -209,8 +209,7 @@ async function updateImageElement(tweetInfo, imgLink, imgCnt)
     let naturalWidth = 0;
 
     img.setAttribute(modifiedAttr, "");
-    updateImgSrc(img, bg, hqSrc);
-    doOnAttributeChange(img, (imgElem) => updateImgSrc(imgElem, bg, hqSrc));
+
     if(!img.complete || img.naturalHeight == 0) { await waitForImgLoad(img); }
     naturalHeight = img.naturalHeight; naturalWidth = img.naturalWidth;
 /*
@@ -226,25 +225,31 @@ async function updateImageElement(tweetInfo, imgLink, imgCnt)
        //  imgContainer.style.margin = "";
     }
 */
-    if(imgCnt < 3) { bg.style.backgroundSize = "contain"; }
-    if(imgCnt < 2)
+
+    const updatePadding = function(panelCnt, background, imgContainerElem)
     {
-        imgContainer.removeAttribute('style');
-        doOnAttributeChange(imgContainer, (container) => {container.removeAttribute('style');}, true );
-    }
-    else
-    {
-        imgContainer.style.marginLeft = "0%";
-        imgContainer.style.marginRight = "0%";
-        imgContainer.style.marginTop = "0%";
-        doOnAttributeChange(imgContainer, (container) => {
-            container.style.marginLeft = "0%";
-            container.style.marginRight = "0%";
-            container.style.marginTop = "0%";
-         }, true);
-    }
+        if(panelCnt != 3)
+        {
+            background.style.backgroundSize = "cover";
+            //imgContainerElem.style.marginBottom = "0%";
+        }
+        if(panelCnt < 2)
+        {
+            imgContainerElem.removeAttribute('style');
+        }
+        else
+        {
+            imgContainerElem.style.marginLeft = "0%";
+            imgContainerElem.style.marginRight = "0%";
+            imgContainerElem.style.marginTop = "0%";
+        }
+    };
+
+    updatePadding(imgCnt, bg, imgContainer);
+    doOnAttributeChange(imgContainer, (container) => updatePadding(imgCnt, bg, container), true );
+
     const flexDir = $(imgLink.parentElement).css('flex-direction');
-    return {imgElem: img, bgElem: bg, layoutContainer: imgLink.parentElement, width: img.naturalWidth, height: img.naturalHeight, flex: flexDir};
+    return {imgElem: img, bgElem: bg, layoutContainer: imgLink.parentElement, width: img.naturalWidth, height: img.naturalHeight, flex: flexDir, hqSrc: hqSrc};
 }
 
 async function updateImageElements(tweet, imgLinks)
@@ -274,11 +279,11 @@ async function updateImageElements(tweet, imgLinks)
         imgCnt = images.length;
         let ratio = 100;
 
-        if(imgCnt == 1)
+        if(imgCnt > 0)
         {
             ratio = (images[0].height / images[0].width) * 100;
         }
-        else if(imgCnt == 2)
+        if(imgCnt == 2)
         {
             let img1 = images[0]; let img2 = images[1];
             let img1Ratio = img1.height / img1.width;
@@ -291,12 +296,12 @@ async function updateImageElements(tweet, imgLinks)
 
                 if(imgToRatio.height > imgToRatio.width)
                 {
-                       ratio *= imgToRatio.width / imgToRatio.height;
+                     ratio = ((ratio / 100) * 0.5) * 100;
                 }
                 else
                 {
                    ratio *= 0.5;
-               }
+                }
 
                 img1.bgElem.style.backgroundSize = "cover";
                 img2.bgElem.style.backgroundSize = "cover";
@@ -306,6 +311,8 @@ async function updateImageElements(tweet, imgLinks)
             else
             {
                 ratio = (imgToRatio.height / imgToRatio.width) * 100;
+                if(ratio > 100) { ratio = ((ratio - 100) * 0.1) + 100; }
+
                 img1.bgElem.style.backgroundSize = "contain";
                 img2.bgElem.style.backgroundSize = "cover";
                 img1.layoutContainer.removeAttribute("style");
@@ -324,10 +331,23 @@ async function updateImageElements(tweet, imgLinks)
                && images[1].width > images[1].height
                && images[2].width > images[2].height
                && images[3].width > images[3].height) { return; } //All-wide 4-panel already has an optimal layout by default.
+
+             if(images[0].width > images[0].height)
+             {
+                 ratio = ((ratio / 100) * 0.5) * 100;
+             }
         }
 
         padder.style = `padding-bottom: ${ratio}%; padding-top: 0px`;
         padder.setAttribute("modifiedPadding","");
+
+        for(let i = 0; i < imgCnt; i++)
+        {
+            let curImg = images[i];
+            updateImgSrc(curImg, curImg.bgElem, curImg.hqSrc);
+            doOnAttributeChange(curImg, (imgElem) => updateImgSrc(imgElem, imgElem.bgElem, imgElem.hqSrc));
+        }
+
         doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + ratio + "%;";} )
     }
 }
