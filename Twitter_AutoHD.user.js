@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.25
+// @version      1.26
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -13,6 +13,7 @@
 // @noframes
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
+// @grant        GM_openInTab
 // @run-at document-body
 // @require https://ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js
 // ==/UserScript==
@@ -21,6 +22,7 @@ const cooky = getCookie("ct0"); //Get our current Twitter session token so we ca
 const requestUrl = 'https://www.savetweetvid.com/result?url='; //Backup option if Twitter API fails
 const modifiedAttr = "THD_modified";
 const tweetQuery = 'div[data-testid="tweet"]';
+const GM_OpenInTabMissing = (typeof GM_openInTab === 'undefined');
 
 var vids = new Map(); //Cache download links for tweets we've already processed this session to reduce API timeout potential and speed-up button creation when the same media is loaded onto timeline again
 
@@ -789,13 +791,15 @@ function setContextMenuVisible(visible)
 
 function updateContextMenuLink(dlURL, tweetInfo)
 {
-     let img = elem.querySelector('img');
     ctxMenuSaveAs.onclick = () => { setContextMenuVisible(false); download(dlURL, filenameFromTweetInfo(tweetInfo)) };
     ctxMenuOpenInNewTab.onclick = () => {
         setContextMenuVisible(false);
-        var lastWin = window;
-        window.open(dlURL, '_blank');
-        lastWin.focus();
+        if(GM_OpenInTabMissing)
+        {
+            var lastWin = window;
+            window.open(dlURL, '_blank');
+            lastWin.focus();
+        } else { GM_openInTab(dlURL, {active: false, insert: true, setParent: true, incognito: false}); }
     };
     ctxMenuCopyAddress.onclick = () => { setContextMenuVisible(false); navigator.clipboard.writeText(dlURL); };
     ctxMenuGRIS.onclick = () => { setContextMenuVisible(false); window.open("https://images.google.com/searchbyimage?image_url=" + dlURL); };
