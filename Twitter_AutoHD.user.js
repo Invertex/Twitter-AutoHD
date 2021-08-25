@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.23
+// @version      1.25
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -345,7 +345,7 @@ async function updateImageElements(tweet, imgLinks)
         {
             let curImg = images[i];
             updateImgSrc(curImg, curImg.bgElem, curImg.hqSrc);
-            doOnAttributeChange(curImg, (imgElem) => updateImgSrc(imgElem, imgElem.bgElem, imgElem.hqSrc));
+            doOnAttributeChange(curImg.layoutContainer, () => { updateImgSrc(curImg, curImg.bgElem, curImg.hqSrc) });
         }
 
         doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + ratio + "%;";} )
@@ -789,8 +789,14 @@ function setContextMenuVisible(visible)
 
 function updateContextMenuLink(dlURL, tweetInfo)
 {
+     let img = elem.querySelector('img');
     ctxMenuSaveAs.onclick = () => { setContextMenuVisible(false); download(dlURL, filenameFromTweetInfo(tweetInfo)) };
-    ctxMenuOpenInNewTab.onclick = () => { setContextMenuVisible(false); window.open(dlURL); };
+    ctxMenuOpenInNewTab.onclick = () => {
+        setContextMenuVisible(false);
+        var lastWin = window;
+        window.open(dlURL, '_blank');
+        lastWin.focus();
+    };
     ctxMenuCopyAddress.onclick = () => { setContextMenuVisible(false); navigator.clipboard.writeText(dlURL); };
     ctxMenuGRIS.onclick = () => { setContextMenuVisible(false); window.open("https://images.google.com/searchbyimage?image_url=" + dlURL); };
 }
@@ -820,21 +826,16 @@ function getCookie(name)
     return null;
 }
 
-function getReactRoot()
-{
-    return document.querySelector('div#react-root');
-}
-
 (async function() {
     'use strict';
     if(isDirectImagePage(window.location.href)) { return; }
 
     NodeList.prototype.forEach = Array.prototype.forEach;
-    const reactRoot = getReactRoot();
+    const reactRoot = await awaitElem(document.body, 'div#react-root', argsChildAndSub);
     const main = await awaitElem(reactRoot, 'main[role="main"] div', argsChildAndSub);
-      let layers = getReactRoot().querySelector('div#layers');
+    let layers = reactRoot.querySelector('div#layers');
     if(layers) { LogMessage("Found Layers"); }
-    awaitElem(getReactRoot(), 'div#layers', argsChildAndSub).then((layers) => {
+    awaitElem(reactRoot, 'div#layers', argsChildAndSub).then((layers) => {
         if(!addHasAttribute(layers, "watchingLayers")) { watchForChange(layers, {childList: true, subtree: true}, onLayersChange); }
     });
 
