@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.26
+// @version      1.27
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -749,6 +749,7 @@ const ctxMenuOpenInNewTab = createCtxMenuItem(ctxMenuList, "Open Image in New Ta
 const ctxMenuSaveAs = createCtxMenuItem(ctxMenuList, "Save Image As");
 const ctxMenuCopyAddress = createCtxMenuItem(ctxMenuList, "Copy Image Address");
 const ctxMenuGRIS = createCtxMenuItem(ctxMenuList, "Search Google for Image");
+const ctxMenuShowDefault = createCtxMenuItem(ctxMenuList, "Show Default Context Menu");
 
 document.body.appendChild(ctxMenu);
 document.body.addEventListener('click', function(e) { setContextMenuVisible(false); });
@@ -789,6 +790,13 @@ function setContextMenuVisible(visible)
     ctxMenu.style.display = visible ? "block" : "none";
 }
 
+var selectedShowDefaultContext = false;
+//To avoid the value being captured when setting up the event listeners.
+function wasShowDefaultContextClicked()
+{
+    return selectedShowDefaultContext;
+}
+
 function updateContextMenuLink(dlURL, tweetInfo)
 {
     ctxMenuSaveAs.onclick = () => { setContextMenuVisible(false); download(dlURL, filenameFromTweetInfo(tweetInfo)) };
@@ -803,6 +811,7 @@ function updateContextMenuLink(dlURL, tweetInfo)
     };
     ctxMenuCopyAddress.onclick = () => { setContextMenuVisible(false); navigator.clipboard.writeText(dlURL); };
     ctxMenuGRIS.onclick = () => { setContextMenuVisible(false); window.open("https://images.google.com/searchbyimage?image_url=" + dlURL); };
+    ctxMenuShowDefault.onclick = () => { selectedShowDefaultContext = true; setContextMenuVisible(false); };
 }
 
 function addCustomCtxMenu(elem, dlLink, tweetInfo)
@@ -810,7 +819,8 @@ function addCustomCtxMenu(elem, dlLink, tweetInfo)
     if(addHasAttribute(elem, "thd_customctx")) { return; }
     elem.addEventListener('contextmenu', function(e)
     {
-        if(ctxMenu.style.display == "block") { e.preventDefault(); setContextMenuVisible(false); }
+        if(wasShowDefaultContextClicked()) { selectedShowDefaultContext = false; } //Skip everything here and show default context menu
+        else if(ctxMenu.style.display == "block") { e.preventDefault(); setContextMenuVisible(false); }
         else
         {
             updateContextMenuLink(dlLink, tweetInfo);
