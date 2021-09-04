@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.27
+// @version      1.29
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -403,12 +403,48 @@ function onLoadVideo (xmlDoc, tweetElem, tweetInfo)
     addDownloadButton(tweetElem, vidUrl, tweetInfo.id, tweetInfo.username);
 };
 
+async function onPlayButtonChange(vid, playContainer)
+{
+    let tabIndex = playContainer.querySelector('div[tabindex="0"]');
+    if(tabIndex)
+    {
+        let spanner = tabIndex.querySelector('div[dir="auto"] > span > span');
+        if(spanner && spanner.innerText == "GIF")
+        {
+            tabIndex.remove();
+            vid.onmouseover = function() {
+            console.log("mouse entered");
+                vid.setAttribute('controls', "");
+            };
+            vid.onmouseleave = function() {
+            console.log("mouse left");
+                if(!vid.paused) { vid.removeAttribute('controls'); }
+            };
+
+        } else { console.log(" no spanner found"); }
+    }
+}
+
+async function watchPlayButton(vidElem)
+{
+    let playContainer = vidElem.parentElement.parentElement.parentElement;
+    let gifPlayBtn = playContainer.querySelector('div[tabindex="0"][role="button"]');
+    if(gifPlayBtn)
+    {
+        console.log("found gif play btn");
+        console.log(gifPlayBtn.parentElement);
+        watchForChange(playContainer, {attributes: true, childList: true, subtree: true}, (playBtn, mutes) => { onPlayButtonChange(vidElem, playContainer);} );
+    }
+}
+
 async function replaceVideoElement(tweet, vidElem)
 {
     if(tweet == null) { return false; }
 
     const tweetInfo = getTweetInfo(tweet);
     if(tweetInfo == null) { return false; }
+
+    watchPlayButton(vidElem);
 
     if(vidElem.src.includes('/tweet_video/'))
     {
@@ -712,7 +748,7 @@ function getMediaFormat(url)
         for(let p = 0; p < params.length; p++)
         {
             if(params[p].includes('format'))
-            { 
+            {
                 return '.' + params[p].split('=').pop().split('?')[0];
             }
         }
