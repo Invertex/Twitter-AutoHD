@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.29
+// @version      1.30
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -540,12 +540,13 @@ function mediaExists(tweet, tweetObserver)
     return foundImages;
 }
 
-async function listenForMediaType(article, tweet)
+async function listenForMediaType(tweet)
 {
     if(addHasAttribute(tweet, "thd_observing")) { return; }
 
   //  if(postRoot.querySelector('div[role="blockquote"]') != null) { LogMessage("bq"); return; } //Can't get the source post from the blockquote HTML, have to use Twitter API eventually
-
+console.log("listening for media on tweet");
+    console.log(tweet);
     const tweetObserver = new MutationObserver((muteList, observer) => { mediaExists(tweet, observer); });
     if(mediaExists(tweet, tweetObserver)) { //return;
                                           }
@@ -559,9 +560,7 @@ function onTimelineChange(addedNodes)
     addedNodes.forEach((child) =>
     {
      //   if(addHasAttribute(child, modifiedAttr)) { return; }
-        awaitElem(child, 'ARTICLE', argsChildAndSub)
-            .then(article => awaitElem(article, tweetQuery, argsChildAndSub)
-                  .then(tweet => { listenForMediaType(article, tweet.parentElement); }));
+        awaitElem(child, 'ARTICLE '+ tweetQuery + ',ARTICLE', argsChildAndSub).then(tweet => { listenForMediaType(tweet.parentElement); })
     });
 }
 
@@ -681,7 +680,7 @@ async function onMainChange(main, mutations)
     if(isOnStatusPage())
     {
         LogMessage("on status page");
-        awaitElem(main, tweetQuery, argsChildAndSub).then((tweet) => { listenForMediaType(main, tweet.parentElement); });
+        awaitElem(main, tweetQuery, argsChildAndSub).then((tweet) => { listenForMediaType(tweet.parentElement); });
     }
 }
 
