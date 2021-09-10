@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.30
+// @version      1.31
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -41,7 +41,7 @@ addGlobalStyle('.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; 
 addGlobalStyle('.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; user-select: none;}');
 addGlobalStyle('.context-menu ul li:hover { background: #0e0e0e;}');
 
-function LogMessage(text) { console.log(text);
+function LogMessage(text) { //console.log(text);
 }
 
 function addGlobalStyle(css) {
@@ -130,7 +130,8 @@ function getUrlFromTweet(tweet)
     let curUrl = window.location.href;
     if(curUrl.includes('/photo/')) { return curUrl; } //Probably viewing full-screen image
 
-    let article = tweet.closest('article');
+    let article = tweet.tagName.toUpperCase() == 'ARTICLE' ? tweet : tweet.closest('article');
+
     if(article == null) { return null; }
 
     let postLink = article.querySelector('a:not([href*="/retweets"],[href$="/likes"])[href*="/status/"][role="link"][dir="auto"]');
@@ -161,7 +162,7 @@ function getTweetInfo(tweet)
 
     const id = url.split('/').pop();
     let username = url.split('/status/')[0].split('/').pop();
-let attributeTo = tweet.querySelector('div[aria-label]');
+    let attributeTo = tweet.querySelector('div[aria-label]');
     let elementIndex = -1;
     if(photoUrl.length > 1) { elementIndex = parseInt(photoUrl[1]); LogMessage(url + " : " + photoUrl[1]); }
 
@@ -413,15 +414,13 @@ async function onPlayButtonChange(vid, playContainer)
         {
             tabIndex.remove();
             vid.onmouseover = function() {
-            console.log("mouse entered");
                 vid.setAttribute('controls', "");
             };
             vid.onmouseleave = function() {
-            console.log("mouse left");
                 if(!vid.paused) { vid.removeAttribute('controls'); }
             };
 
-        } else { console.log(" no spanner found"); }
+        } else {/* console.log(" no spanner found");*/ }
     }
 }
 
@@ -429,10 +428,9 @@ async function watchPlayButton(vidElem)
 {
     let playContainer = vidElem.parentElement.parentElement.parentElement;
     let gifPlayBtn = playContainer.querySelector('div[tabindex="0"][role="button"]');
+
     if(gifPlayBtn)
     {
-        console.log("found gif play btn");
-        console.log(gifPlayBtn.parentElement);
         watchForChange(playContainer, {attributes: true, childList: true, subtree: true}, (playBtn, mutes) => { onPlayButtonChange(vidElem, playContainer);} );
     }
 }
@@ -545,8 +543,6 @@ async function listenForMediaType(tweet)
     if(addHasAttribute(tweet, "thd_observing")) { return; }
 
   //  if(postRoot.querySelector('div[role="blockquote"]') != null) { LogMessage("bq"); return; } //Can't get the source post from the blockquote HTML, have to use Twitter API eventually
-console.log("listening for media on tweet");
-    console.log(tweet);
     const tweetObserver = new MutationObserver((muteList, observer) => { mediaExists(tweet, observer); });
     if(mediaExists(tweet, tweetObserver)) { //return;
                                           }
@@ -560,7 +556,8 @@ function onTimelineChange(addedNodes)
     addedNodes.forEach((child) =>
     {
      //   if(addHasAttribute(child, modifiedAttr)) { return; }
-        awaitElem(child, 'ARTICLE '+ tweetQuery + ',ARTICLE', argsChildAndSub).then(tweet => { listenForMediaType(tweet.parentElement); })
+           awaitElem(child, 'ARTICLE', argsChildAndSub).then(listenForMediaType);
+      //  awaitElem(child, 'ARTICLE,ARTICLE '+ tweetQuery, argsChildAndSub).then(tweet => { listenForMediaType(tweet.parentElement); })
     });
 }
 
