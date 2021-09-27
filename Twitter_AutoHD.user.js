@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.31
+// @version      1.32
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -9,6 +9,7 @@
 // @icon         https://i.imgur.com/M9oO8K9.png
 // @match        https://*.twitter.com/*
 // @match        https://*.twimg.com/media/*
+// @match        https://*.github.io/iframe/*2/twitter.min.html*
 // @connect      savetweetvid.com
 // @noframes
 // @grant        GM_xmlhttpRequest
@@ -337,7 +338,7 @@ async function updateImageElements(tweet, imgLinks)
 
              if(images[0].width > images[0].height)
              {
-                 ratio = ((ratio / 100) * 0.5) * 100;
+                 ratio = (ratio / 100) * 100;
              }
         }
 
@@ -494,7 +495,7 @@ function mediaExists(tweet, tweetObserver)
     {
         if(replaceVideoElement(tweet, video))
         {
-            tweetObserver.disconnect();
+            tweetObserver?.disconnect();
             addHasAttribute(video, modifiedAttr);
             return true;
         }
@@ -544,8 +545,7 @@ async function listenForMediaType(tweet)
 
   //  if(postRoot.querySelector('div[role="blockquote"]') != null) { LogMessage("bq"); return; } //Can't get the source post from the blockquote HTML, have to use Twitter API eventually
     const tweetObserver = new MutationObserver((muteList, observer) => { mediaExists(tweet, observer); });
-    if(mediaExists(tweet, tweetObserver)) { //return;
-                                          }
+    mediaExists(tweet, tweetObserver);
     tweetObserver.observe(tweet, {attributes: true, childList: true, subtree: true});
 }
 
