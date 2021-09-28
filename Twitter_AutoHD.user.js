@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.32
+// @version      1.33
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -9,7 +9,6 @@
 // @icon         https://i.imgur.com/M9oO8K9.png
 // @match        https://*.twitter.com/*
 // @match        https://*.twimg.com/media/*
-// @match        https://*.github.io/iframe/*2/twitter.min.html*
 // @connect      savetweetvid.com
 // @noframes
 // @grant        GM_xmlhttpRequest
@@ -88,33 +87,56 @@ function download(url, filename)
 
 async function addDownloadButton(tweet, vidUrl, tweetInfo)
 {
-    const buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"]');
-    if(buttonGrp == null || buttonGrp.querySelector('div#thd_dl') != null) { return; } //Button group doesn't exist or we already processed this element and added a DL button
-    const filename = filenameFromTweetInfo(tweetInfo);
+    let getButtonToDupe = function(btnGrp) {return buttonGrp.lastChild.cloneNode(true); };
+    let isIframe = false;
 
-    const dlBtn = buttonGrp.lastChild.cloneNode(true);
+    let buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"]');
+    if(buttonGrp == null) //Try iframe version
+    {
+        buttonGrp = tweet.querySelector('div a[href*="like?"]')?.parentElement;
+        if(buttonGrp != null) {
+            isIframe = true;
+            getButtonToDupe = function(btnGrp) {
+                return buttonGrp.querySelector('a:nth-child(2)').cloneNode(true);
+            };
+        }
+    }
+    if(buttonGrp == null || buttonGrp.querySelector('div#thd_dl') != null) { return; } //Button group doesn't exist or we already processed this element and added a DL button
+
+    const filename = filenameFromTweetInfo(tweetInfo);
+    const dlBtn = getButtonToDupe(buttonGrp);
+
     dlBtn.id = "thd_dl";
     buttonGrp.appendChild(dlBtn);
+    dlBtn.href = vidUrl;
 
     const svg = dlBtn.querySelector('svg');
     svg.innerHTML = dlSVG;
     svg.setAttribute('viewBox', "-80 -80 160 160");
-    const iconDiv = dlBtn.querySelector('div[dir="ltr"]');
-    const oldIconColor = $(iconDiv).css("color");
-    const bg = iconDiv.firstElementChild.firstElementChild;
+
+    const iconDiv = isIframe ? dlBtn.querySelector('div[dir="auto"]') : dlBtn.querySelector('div[dir="ltr"]');
+    const bg = isIframe ? svg.parentElement : iconDiv.firstElementChild.firstElementChild;
+    const linkElem = isIframe ? dlBtn : $(dlBtn).wrapAll(`<a href="${vidUrl}" download="${filename}"></a>`);
+
     const oldBGColor = $(bg).css("background-color");
+    const oldIconColor = $(iconDiv).css("color");
     //Emulate Twitter hover color change
     $(dlBtn).hover(function(){
         $(bg).css("background-color", "#f3d60720");
-        $(iconDiv).css("color", "#f3d607FF");
+         $(bg).css("border-radius", "20px");
+        $(svg).css("color", "#f3d607FF");
     },function(){
         $(bg).css("background-color", oldBGColor);
-        $(iconDiv).css("color", oldIconColor);
+        $(svg).css("color", oldIconColor);
     });
 
-    const linkElem = $(dlBtn).wrapAll(`<a href="${vidUrl}" download="${filename}"></a>`);
+    if(isIframe)
+    {
+        linkElem.setAttribute('download', filename);
+        dlBtn.querySelector('div[dir="auto"] > span').innerText = "Download";
+    }
     $(dlBtn.parentNode).addClass(dlBtn.className);
-    $(linkElem).click(function(e){ e.preventDefault(); download(vidUrl, filename); });
+    $(linkElem).click(function(e){ e.preventDefault(); e.stopPropagation(); download(vidUrl, filename); });
 }
 
 function addHasAttribute(elem, attr)
@@ -372,24 +394,26 @@ function getVidURL(id)
             credentials: 'include',
             referrer: 'https://mobile.twitter.com'
         };
-
-        fetch("https://api.twitter.com/1.1/statuses/show.json?include_profile_interstitial_type=1&include_blocking=1&include_blocked_by=1&include_followed_by=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&skip_status=1&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&include_reply_count=1&tweet_mode=extended&trim_user=false&include_ext_media_color=true&id=" + id,
-              init)
-            .then((response) =>
+        const fetchURL = "https://api.twitter.com/1.1/statuses/show.json?include_profile_interstitial_type=1&include_blocking=1&include_blocked_by=1&include_followed_by=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&skip_status=1&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&include_reply_count=1&tweet_mode=extended&trim_user=false&include_ext_media_color=true&id=";
+        try
+        {
+            fetch(fetchURL + id, init).then(function(response)
             {
                 if (response.status == 200)
                 {
-                    response.json().then((json) =>
+                    response.json().then(function(json)
                     {
                         let entities = json.extended_entities;
                         if(entities == undefined || entities == null) { resolve(null); }
                         let mp4Variants = entities.media[0].video_info.variants.filter(variant => variant.content_type === 'video/mp4');
                         mp4Variants = mp4Variants.sort((a, b) => (b.bitrate - a.bitrate));
                         resolve((mp4Variants.length) ? mp4Variants[0].url : null);
+                        return;
                     });
                 }
                 else { resolve(null); }
-            }).catch((err) => { reject({ error: err }); });
+            }).catch((err) => { reject({ error: err }); resolve(null); });
+        } catch (err) {resolve(null);}
     });
 }
 
@@ -402,7 +426,7 @@ function onLoadVideo (xmlDoc, tweetElem, tweetInfo)
     vidUrl = vidUrl.split('?')[0];
     vids.set(tweetInfo.id, vidUrl);
 //    LogMessage("cache vid: " + tweetInfo.id + ":" + vidUrl);
-    addDownloadButton(tweetElem, vidUrl, tweetInfo.id, tweetInfo.username);
+    addDownloadButton(tweetElem, vidUrl, tweetInfo);
 };
 
 async function onPlayButtonChange(vid, playContainer)
@@ -461,13 +485,16 @@ async function replaceVideoElement(tweet, vidElem)
         return true;
     }
 
-    const vidUrl = await getVidURL(tweetInfo.id);
-    if(vidUrl) //Was able to grab URL using legacy Twitter API and user token
+    try
     {
-    //    LogMessage(`found vid! : ${vidUrl} id: ${tweetInfo.id} url: ${tweetInfo.url} username: ${tweetInfo.username}`);
-        addDownloadButton(tweet, vidUrl, tweetInfo);
-        return true;
-    }
+        const vidUrl = await getVidURL(tweetInfo.id);
+        if(vidUrl != null) //Was able to grab URL using legacy Twitter API and user token
+        {
+            //    LogMessage(`found vid! : ${vidUrl} id: ${tweetInfo.id} url: ${tweetInfo.url} username: ${tweetInfo.username}`);
+            addDownloadButton(tweet, vidUrl, tweetInfo);
+            return true;
+        }
+    } catch(_){}
 
     //Previous methods failed, use an external service for grabbing the video.
     GM_xmlhttpRequest({
@@ -481,6 +508,7 @@ async function replaceVideoElement(tweet, vidElem)
         // responseType: "document",
         onload: function(response){ onLoadVideo((new DOMParser()).parseFromString(response.response, "text/html"), tweet, tweetInfo); }
     });
+
     vids.set(tweetInfo.id, '');
     return true;
 }
@@ -661,9 +689,8 @@ function doOnAttributeChange(elem, onChange, repeatOnce = false)
 
 async function onMainChange(main, mutations)
 {
-
     let primaryColumn = main.querySelector('div[data-testid="primaryColumn"]');
-     LogMessage("Main changed");
+
     if(primaryColumn != null)
     {
         LogMessage("Has primary column");
@@ -877,6 +904,14 @@ function getCookie(name)
     if(isDirectImagePage(window.location.href)) { return; }
 
     NodeList.prototype.forEach = Array.prototype.forEach;
+
+    let isIframe = document.body.querySelector('div#app');
+
+    if(isIframe != null)
+    {
+        awaitElem(isIframe, 'article[role="article"]', argsChildAndSub).then(listenForMediaType);
+        return;
+    }
     const reactRoot = await awaitElem(document.body, 'div#react-root', argsChildAndSub);
     const main = await awaitElem(reactRoot, 'main[role="main"] div', argsChildAndSub);
     let layers = reactRoot.querySelector('div#layers');
