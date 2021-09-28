@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.33
+// @version      1.34
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -182,9 +182,10 @@ function getTweetInfo(tweet)
     let url = link.split('?')[0];
     let photoUrl = url.split('/photo/');
     url = photoUrl[0];
+    const urlSplit = url.split('/status/');
+    const id = urlSplit[1].split('/')[0];
 
-    const id = url.split('/').pop();
-    let username = url.split('/status/')[0].split('/').pop();
+    let username = urlSplit[0].split('/').pop();
     let attributeTo = tweet.querySelector('div[aria-label]');
     let elementIndex = -1;
     if(photoUrl.length > 1) { elementIndex = parseInt(photoUrl[1]); LogMessage(url + " : " + photoUrl[1]); }
