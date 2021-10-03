@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.34
+// @version      1.36
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -14,6 +14,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
 // @grant        GM_openInTab
+// @grant        GM_setClipboard
 // @run-at document-body
 // @require https://ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js
 // ==/UserScript==
@@ -39,7 +40,7 @@ addGlobalStyle('.loader { border: 16px solid #f3f3f373; display: flex; margin: a
 addGlobalStyle('.context-menu { position: absolute; text-align: center; margin: 0px; background: #040404; border: 1px solid #0e0e0e; border-radius: 5px;}');
 addGlobalStyle('.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; list-style: none;}');
 addGlobalStyle('.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; user-select: none;}');
-addGlobalStyle('.context-menu ul li:hover { background: #0e0e0e;}');
+addGlobalStyle('.context-menu ul li:hover { background: #202020;}');
 
 function LogMessage(text) { //console.log(text);
 }
@@ -230,7 +231,7 @@ async function updateImageElement(tweetInfo, imgLink, imgCnt)
     const bg = imgContainer.querySelector('div[style^="background-image"]');
    // LogMessage(imgLink);
 
-    addCustomCtxMenu(imgLink, hqSrc, tweetInfo);
+    addCustomCtxMenu(imgLink, hqSrc, tweetInfo, img);
 
     let naturalHeight = 0;
     let naturalWidth = 0;
@@ -324,10 +325,6 @@ async function updateImageElements(tweet, imgLinks)
                 if(imgToRatio.height > imgToRatio.width)
                 {
                      ratio = ((ratio / 100) * 0.5) * 100;
-                }
-                else
-                {
-                   ratio *= 0.5;
                 }
 
                 img1.bgElem.style.backgroundSize = "cover";
@@ -807,6 +804,7 @@ ctxMenu.appendChild(ctxMenuList);
 
 const ctxMenuOpenInNewTab = createCtxMenuItem(ctxMenuList, "Open Image in New Tab");
 const ctxMenuSaveAs = createCtxMenuItem(ctxMenuList, "Save Image As");
+const ctxMenuCopyImg = createCtxMenuItem(ctxMenuList, "Copy Image");
 const ctxMenuCopyAddress = createCtxMenuItem(ctxMenuList, "Copy Image Address");
 const ctxMenuGRIS = createCtxMenuItem(ctxMenuList, "Search Google for Image");
 const ctxMenuShowDefault = createCtxMenuItem(ctxMenuList, "Show Default Context Menu");
@@ -857,8 +855,9 @@ function wasShowDefaultContextClicked()
     return selectedShowDefaultContext;
 }
 
-function updateContextMenuLink(dlURL, tweetInfo)
+function updateContextMenuLink(dlURL, tweetInfo, img)
 {
+    img.crossOrigin = 'Anonymous'; //Needed to avoid browser preventing the Canvas from being copied when doing "Copy Image"
     ctxMenuSaveAs.onclick = () => { setContextMenuVisible(false); download(dlURL, filenameFromTweetInfo(tweetInfo)) };
     ctxMenuOpenInNewTab.onclick = () => {
         setContextMenuVisible(false);
@@ -869,12 +868,26 @@ function updateContextMenuLink(dlURL, tweetInfo)
             lastWin.focus();
         } else { GM_openInTab(dlURL, {active: false, insert: true, setParent: true, incognito: false}); }
     };
+    ctxMenuCopyImg.onclick = () =>
+    {
+        setContextMenuVisible(false);
+        try
+        {
+            let c = document.createElement('canvas');
+            c.width = img.naturalWidth; c.height = img.naturalHeight;
+            c.getContext('2d').drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
+            c.toBlob((png) =>
+                     {
+                navigator.clipboard.write([ new ClipboardItem({ [png.type]: png }) ]);
+            }, "image/png", 1);
+        } catch (err){ console.log(err); };
+    };
     ctxMenuCopyAddress.onclick = () => { setContextMenuVisible(false); navigator.clipboard.writeText(dlURL); };
     ctxMenuGRIS.onclick = () => { setContextMenuVisible(false); window.open("https://images.google.com/searchbyimage?image_url=" + dlURL); };
     ctxMenuShowDefault.onclick = () => { selectedShowDefaultContext = true; setContextMenuVisible(false); };
 }
 
-function addCustomCtxMenu(elem, dlLink, tweetInfo)
+function addCustomCtxMenu(elem, dlLink, tweetInfo, img)
 {
     if(addHasAttribute(elem, "thd_customctx")) { return; }
     elem.addEventListener('contextmenu', function(e)
@@ -883,7 +896,7 @@ function addCustomCtxMenu(elem, dlLink, tweetInfo)
         else if(ctxMenu.style.display == "block") { e.preventDefault(); setContextMenuVisible(false); }
         else
         {
-            updateContextMenuLink(dlLink, tweetInfo);
+            updateContextMenuLink(dlLink, tweetInfo, img);
             setContextMenuVisible(true);
             ctxMenu.style.left = mouseX(e) + "px";
             ctxMenu.style.top = mouseY(e) + "px";
