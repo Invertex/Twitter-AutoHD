@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.40
+// @version      1.41
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -728,7 +728,7 @@ function primaryColumnResizer(primaryColumn, mouseEvent, mouseDown, mouseUp)
         primaryColumnResizing = false;
         if(mouseUp)
         {
-            let primarySize = parseInt(maxWidthClass.styleMap.get('max-width'));
+            let primarySize = parseInt(maxWidthClass.style.getPropertyValue('max-width'));
             updateLayoutWidth(primarySize, true);
         }
     };
@@ -740,7 +740,7 @@ function primaryColumnResizer(primaryColumn, mouseEvent, mouseDown, mouseUp)
         {
             primaryColumnMouseDownPos = mouseEvent.pageX;
             primaryColumnResizing = true;
-            primaryColumnPreWidth = parseInt(maxWidthClass.styleMap.get('max-width'));
+            primaryColumnPreWidth = parseInt(maxWidthClass.style.getPropertyValue('max-width'));
         }
     }
     else
@@ -759,7 +759,7 @@ function primaryColumnResizer(primaryColumn, mouseEvent, mouseDown, mouseUp)
 
 function updateLayoutWidth(width, finalize)
 {
-    maxWidthClass.styleMap.set('max-width', width + "px");
+    maxWidthClass.style.setProperty('max-width', width + "px");
     if(finalize)
     {
         headerColumn = document.body.querySelector('HEADER');
@@ -775,14 +775,11 @@ function updateLayoutWidth(width, finalize)
 
 async function onMainChange(main, mutations)
 {
-    let primaryColumn = main.querySelector('div[data-testid="primaryColumn"]');
-
-    if(primaryColumn != null)
+    awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>
     {
         if(addHasAttribute(primaryColumn, modifiedAttr)) { return; }
-
-        var pageWidthLayoutRule = getCSSRuleContainingStyle('width', ("." + main.className).split(' '));
-        pageWidthLayoutRule.styleMap.set('width', "100%");
+        var pageWidthLayoutRule = getCSSRuleContainingStyle('width', (("." + main.className).replace(' ', ' .')).split(' '));
+        pageWidthLayoutRule.style.setProperty('width', "100%");
 
         let primaryColumnGrp = primaryColumn.parentElement.parentElement;
         let columnClassNames = ("." + primaryColumn.className.replace(" ", " .")).split(' ');
@@ -796,7 +793,8 @@ async function onMainChange(main, mutations)
         document.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
       //  let section = awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub);
         awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => { LogMessage("region found"); watchForTimeline(primaryColumn, section); });
-    }
+    });
+
     if(isOnStatusPage())
     {
         LogMessage("on status page");
@@ -1053,6 +1051,7 @@ function getCookie(name)
     }
     const reactRoot = await awaitElem(document.body, 'div#react-root', argsChildAndSub);
     const main = await awaitElem(reactRoot, 'main[role="main"] div', argsChildAndSub);
+
     let layers = reactRoot.querySelector('div#layers');
     if(layers) { LogMessage("Found Layers"); }
     awaitElem(reactRoot, 'div#layers', argsChildAndSub).then((layers) => {
