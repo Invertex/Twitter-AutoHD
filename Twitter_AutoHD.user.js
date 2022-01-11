@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.39
+// @version      1.40
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -15,6 +15,10 @@
 // @grant        GM_download
 // @grant        GM_openInTab
 // @grant        GM_setClipboard
+// @grant GM_setValue
+// @grant GM_getValue
+// @grant GM.setValue
+// @grant GM.getValue
 // @run-at document-body
 // @require https://ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js
 // ==/UserScript==
@@ -42,6 +46,23 @@ addGlobalStyle('.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; 
 addGlobalStyle('.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; user-select: none;}');
 addGlobalStyle('.context-menu ul li:hover { background: #202020;}');
 
+/** Save/Load User Cutom Layout Width**/
+const usePref_MainWidthKey = "thd_primaryWidth";
+
+//Greasemonkey does not have this functionality, so helpful way to check which function to use
+const isGM = (typeof GM_addValueChangeListener === 'undefined');
+
+async function getUserPref(key, defaultVal)
+{
+  if(isGM) { return await GM.getValue(key, defaultVal); }
+  return await GM_getValue(key, defaultVal);
+}
+async function setUserPref(key, value)
+{
+  if(isGM) { return await GM.setValue(key, value); }
+	return await GM_setValue(key, value);
+}
+
 function LogMessage(text) { //console.log(text);
 }
 
@@ -53,6 +74,7 @@ function addGlobalStyle(css) {
     style.type = 'text/css';
     style.innerHTML = css;
     head.appendChild(style);
+    return style;
 }
 
 //Intercept m3u8 playlist requests and modify the contents to only include the highest quality
@@ -290,7 +312,7 @@ async function updateImageElements(tweet, imgLinks)
 
         let tweetInfo = getTweetInfo(tweet);
         const padder = imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement.querySelector('div[style^="padding-bottom"]');
-        padder.parentElement.style = "";
+        padder.parentElement.style = ""; //Get rid of static content size values
         const flexer = padder.closest('div[id^="id_"] > div').style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
 
         const images = [];
@@ -374,7 +396,8 @@ async function updateImageElements(tweet, imgLinks)
             doOnAttributeChange(curImg.layoutContainer, () => { updateImgSrc(curImg, curImg.bgElem, curImg.hqSrc) });
         }
 
-        doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + ratio + "%; padding-top: 0px;";} )
+        doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + ratio + "%;";} )
+        doOnAttributeChange(padder.parentElement, (padderParentElem) => { padderParentElem.style = "";} )
     }
 }
 
@@ -687,19 +710,92 @@ function doOnAttributeChange(elem, onChange, repeatOnce = false)
     rootObserver.observe(elem, {childList: false, subtree: false, attributes: true});
 }
 
+var primaryColumnCursorDistToEdge = 900;
+var primaryColumnMouseDownPos = 0;
+var primaryColumnResizing = false;
+var primaryColumnPreWidth = 600;
+var maxWidthClass = null;
+var preCursor = document.body.style.cursor;
+var headerColumn = null;
+
+function primaryColumnResizer(primaryColumn, mouseEvent, mouseDown, mouseUp)
+{
+    let primaryRect = primaryColumn.getBoundingClientRect();
+    let localPosX = mouseEvent.clientX - primaryRect.left;
+    primaryColumnCursorDistToEdge = Math.abs(primaryRect.width - localPosX);
+
+    if(mouseUp || primaryColumnCursorDistToEdge > 180){
+        primaryColumnResizing = false;
+        if(mouseUp)
+        {
+            let primarySize = parseInt(maxWidthClass.styleMap.get('max-width'));
+            updateLayoutWidth(primarySize, true);
+        }
+    };
+    if(primaryColumnCursorDistToEdge < 6 || primaryColumnResizing)
+    {
+        preCursor = document.body.style.cursor;
+        document.body.style.cursor = "ew-resize";
+        if(mouseDown)
+        {
+            primaryColumnMouseDownPos = mouseEvent.pageX;
+            primaryColumnResizing = true;
+            primaryColumnPreWidth = parseInt(maxWidthClass.styleMap.get('max-width'));
+        }
+    }
+    else
+    {
+         document.body.style.cursor = (preCursor == "ew-resize") ? "auto" : preCursor;
+    }
+    if(primaryColumnResizing)
+    {
+        mouseEvent.preventDefault();
+        let columnOffset = mouseEvent.pageX - primaryColumnMouseDownPos;
+        let newColumnSize = primaryColumnPreWidth + columnOffset;
+        newColumnSize = Math.max(250, newColumnSize);
+        updateLayoutWidth(newColumnSize);
+    }
+}
+
+function updateLayoutWidth(width, finalize)
+{
+    maxWidthClass.styleMap.set('max-width', width + "px");
+    if(finalize)
+    {
+        headerColumn = document.body.querySelector('HEADER');
+        if(width >= 600)
+        {
+            let flexRatio = 600 / width;
+            flexRatio *= flexRatio;
+            headerColumn.style.flexGrow = flexRatio;
+        }
+        setUserPref(usePref_MainWidthKey, width);
+    }
+}
+
 async function onMainChange(main, mutations)
 {
     let primaryColumn = main.querySelector('div[data-testid="primaryColumn"]');
 
     if(primaryColumn != null)
     {
-        LogMessage("Has primary column");
-
         if(addHasAttribute(primaryColumn, modifiedAttr)) { return; }
-             LogMessage("Has primary column unmodified");
+
+        var pageWidthLayoutRule = getCSSRuleContainingStyle('width', ("." + main.className).split(' '));
+        pageWidthLayoutRule.styleMap.set('width', "100%");
+
+        let primaryColumnGrp = primaryColumn.parentElement.parentElement;
+        let columnClassNames = ("." + primaryColumn.className.replace(" ", " .")).split(' ');
+
+        maxWidthClass = getCSSRuleContainingStyle("max-width", columnClassNames);
+        getUserPref(usePref_MainWidthKey, 600).then((userWidth) => updateLayoutWidth(userWidth, true));
+
+        primaryColumnGrp.addEventListener('mousemove', (e) => { primaryColumnResizer(primaryColumn, e, false, false) });
+        primaryColumnGrp.addEventListener('mousedown', (e) => { primaryColumnResizer(primaryColumn, e, true, false) });
+        window.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
+        document.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
       //  let section = awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub);
         awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => { LogMessage("region found"); watchForTimeline(primaryColumn, section); });
-
     }
     if(isOnStatusPage())
     {
@@ -906,6 +1002,33 @@ function addCustomCtxMenu(elem, dlLink, tweetInfo, img)
         }
     }, false);
 }
+
+function getCSSRuleContainingStyle(styleName, selectors)
+{
+    var sheets = document.styleSheets;
+    for (var i = 0, l = sheets.length; i < l; i++)
+    {
+        var curSheet = sheets[i];
+        if( !curSheet.cssRules ) { continue; }
+
+        for (var j = 0, k = curSheet.cssRules.length; j < k; j++)
+        {
+            var rule = curSheet.cssRules[j];
+            if (rule.selectorText && rule.style.length > 0/* && rule.selectorText.split(',').indexOf(selector) !== -1*/)
+            {
+                for(var s = 0; s < selectors.length; s++)
+                {
+                    if(rule.selectorText.includes(selectors[s]) && rule.style[0] == styleName)
+                    {
+                        return rule;
+                    }
+                }
+            }
+        }
+    }
+    return null;
+}
+
 /** RIGHT-CLICK CONTEXT MENU STUFF END **/
 
 function getCookie(name)
