@@ -232,11 +232,10 @@ async function updateImageElement(tweetInfo, imgLink, imgCnt)
    // LogMessage(imgLink);
 
     addCustomCtxMenu(imgLink, hqSrc, tweetInfo, img);
+    img.setAttribute(modifiedAttr, "");
 
     let naturalHeight = 0;
     let naturalWidth = 0;
-
-    img.setAttribute(modifiedAttr, "");
 
     if(!img.complete || img.naturalHeight == 0) { await waitForImgLoad(img); }
     naturalHeight = img.naturalHeight; naturalWidth = img.naturalWidth;
@@ -291,6 +290,9 @@ async function updateImageElements(tweet, imgLinks)
 
         let tweetInfo = getTweetInfo(tweet);
         const padder = imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement.querySelector('div[style^="padding-bottom"]');
+        padder.parentElement.style = "";
+        const flexer = padder.closest('div[id^="id_"] > div').style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
+
         const images = [];
 
         for(let link = 0; link < imgCnt; link++)
@@ -362,7 +364,7 @@ async function updateImageElements(tweet, imgLinks)
              }
         }
 
-        padder.style = `padding-bottom: ${ratio}%; padding-top: 0px`;
+        padder.style = `padding-bottom: ${ratio}%; padding-top: 0px;`;
         padder.setAttribute("modifiedPadding","");
 
         for(let i = 0; i < imgCnt; i++)
@@ -372,7 +374,7 @@ async function updateImageElements(tweet, imgLinks)
             doOnAttributeChange(curImg.layoutContainer, () => { updateImgSrc(curImg, curImg.bgElem, curImg.hqSrc) });
         }
 
-        doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + ratio + "%;";} )
+        doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + ratio + "%; padding-top: 0px;";} )
     }
 }
 
@@ -711,7 +713,7 @@ async function updateFullViewImage(img, tweetInfo)
     if(addHasAttribute(img, "thd_modified")) { return; }
     let bg = img.parentElement.querySelector('div');
     let hqSrc = getHighQualityImage(img.src);
-    addCustomCtxMenu(img, hqSrc, tweetInfo);
+    addCustomCtxMenu(img, hqSrc, tweetInfo, img);
     updateImgSrc(img, bg, hqSrc);
     doOnAttributeChange(img, (imgElem) => {updateImgSrc(imgElem, bg, hqSrc);}, false);
 }
@@ -720,8 +722,8 @@ async function onLayersChange(layers, mutation)
 {
     if(mutation.addedNodes != null && mutation.addedNodes.length > 0)
     {
-        const addedElems = Array.from(mutation.addedNodes);
-        const dialog = await awaitElem(addedElems[0], 'div[role="dialog"]', argsChildAndSub);
+        const contentContainer = Array.from(mutation.addedNodes)[0];
+        const dialog = await awaitElem(contentContainer, 'div[role="dialog"]', argsChildAndSub);
         const img = await awaitElem(dialog, 'img[alt="Image"]', argsChildAndSub);
         const list = dialog.querySelector('ul[role="list"]');
         let tweetInfo = getTweetInfo(img);
