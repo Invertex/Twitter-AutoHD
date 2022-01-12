@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.43
+// @version      1.44
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -274,7 +274,6 @@ async function updateImageElement(tweetInfo, imgLink, imgCnt)
        //  imgContainer.style.margin = "";
     }
 */
-
     const updatePadding = function(panelCnt, background, imgContainerElem)
     {
         if(panelCnt != 3)
@@ -341,31 +340,28 @@ async function updateImageElements(tweet, imgLinks)
             let img1Ratio = img1.height / img1.width;
             let img2Ratio = img2.height / img2.width;
             var imgToRatio = img1Ratio > img2Ratio ? img1 : img2;
+            ratio = (imgToRatio.height / imgToRatio.width);
+
+            img1.bgElem.style.backgroundSize = "cover";
+            img2.bgElem.style.backgroundSize = "cover";
+            img1.layoutContainer.removeAttribute("style");
+            img2.layoutContainer.removeAttribute("style");
 
             if(img1.flex == "row")
             {
-                ratio = (imgToRatio.height / imgToRatio.width) * 100;
-
                 if(imgToRatio.height > imgToRatio.width)
                 {
-                     ratio = ((ratio / 100) * 0.5) * 100;
+                     ratio *= 0.5;
                 }
-
-                img1.bgElem.style.backgroundSize = "cover";
-                img2.bgElem.style.backgroundSize = "cover";
-                img1.layoutContainer.removeAttribute("style");
-                img2.layoutContainer.removeAttribute("style");
             }
             else
             {
-                ratio = (imgToRatio.height / imgToRatio.width) * 100;
-                if(ratio > 100) { ratio = ((ratio - 100) * 0.1) + 100; }
-
-                img1.bgElem.style.backgroundSize = "contain";
-                img2.bgElem.style.backgroundSize = "cover";
-                img1.layoutContainer.removeAttribute("style");
-                img2.layoutContainer.removeAttribute("style");
+               //if(ratio > 1.0) {   ratio = ((ratio - 1.0) * 0.5) + 1.0;}
+                ratio *= 0.5;
             }
+
+            ratio = Math.min(ratio, 3.0);
+            ratio = ratio * 100;
         }
         else if(imgCnt == 3 && images[0].flex == "row")
         {
@@ -378,12 +374,20 @@ async function updateImageElements(tweet, imgLinks)
             if(images[0].width > images[0].height
                && images[1].width > images[1].height
                && images[2].width > images[2].height
-               && images[3].width > images[3].height) { return; } //All-wide 4-panel already has an optimal layout by default.
+               && images[3].width > images[3].height){
+            } //All-wide 4-panel already has an optimal layout by default.
+            else if(images[0].width > images[0].height)
+            {
+                // ratio = 100;
+                let img1Ratio = images[0].height / images[0].width;
+                let img2Ratio = images[1].height / images[1].width;
+                let img3Ratio = images[2].height / images[2].width;
+                let img4Ratio = images[3].height / images[3].width;
+                let minImg = img1Ratio > img2Ratio ? images[1] : images[0];
 
-             if(images[0].width > images[0].height)
-             {
-                 ratio = (ratio / 100) * 100;
-             }
+                ratio = (images[0].height + images[1].height) / minImg.width;
+                ratio *= 100;
+            }
         }
 
         padder.style = `padding-bottom: ${ratio}%; padding-top: 0px;`;
@@ -763,12 +767,9 @@ function updateLayoutWidth(width, finalize)
     if(finalize)
     {
         headerColumn = document.body.querySelector('HEADER');
-        if(width >= 600)
-        {
-            let flexRatio = 600 / width;
-            flexRatio *= flexRatio;
-            headerColumn.style.flexGrow = flexRatio;
-        }
+        let flexGrow = 600 / width;
+        flexGrow *= flexGrow;
+        headerColumn.style.flexGrow = (width >= 600) ? flexGrow : 1;
         setUserPref(usePref_MainWidthKey, width);
     }
 }
