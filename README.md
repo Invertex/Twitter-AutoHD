@@ -8,6 +8,8 @@
 
 -Allows click and drag of the right edge of the content feed to shrink/epxand it to your liking. (setting will auto-save for you)
 
+-Toggle to collapse the "What's happening?" trending panel.
+
 -Custom context menu when right-clicking an image. This ensures a descriptive filename when saving, like this:</br>
 `username - postStatusNum_imgNum.jpg`
 
@@ -23,7 +25,7 @@ Then click [this link](https://github.com/Invertex/Twitter-AutoHD/raw/master/Twi
 
 # Visual changes
 Video download button:<br/>
-<img src="https://i.gyazo.com/3ef79354c0f4ef8b0a8106d377501cc4.gif"/></br></br>
+<img src="https://i.imgur.com/h5YeMWx.gif"/></br></br>
 Image layout:
 Original           |  Twitter AutoHD
 :-------------------------:|:-------------------------:
@@ -36,3 +38,5 @@ Content Feed Width Resizing:
 
 https://user-images.githubusercontent.com/7742262/148937412-98806bfe-805a-4e75-b371-d0b31dcf45a2.mp4
 
+Trending visibility toggle button:</br>
+<img src="https://i.imgur.com/A3pSNxC.gif"/>
