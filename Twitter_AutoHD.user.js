@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.41
+// @version      1.43
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -48,7 +48,7 @@ addGlobalStyle('.context-menu ul li:hover { background: #202020;}');
 
 /** Save/Load User Cutom Layout Width**/
 const usePref_MainWidthKey = "thd_primaryWidth";
-
+const usePref_hideTrendingKey = "thd_hideTrending";
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
@@ -773,6 +773,47 @@ function updateLayoutWidth(width, finalize)
     }
 }
 
+async function setupTrendingControls(trendingBox)
+{
+    const showStr = "Show";
+    const hideStr = "Hide";
+
+    const setTrendingVisible = function(container, button, hidden)
+    {
+        container.style.maxHeight = hidden ? "44px" : "none";
+        button.innerText = hidden ? showStr : hideStr;
+        setUserPref(usePref_hideTrendingKey, hidden);
+    };
+
+    let trendingTitle = await awaitElem(trendingBox, 'h2', argsChildAndSub);
+
+    if(!addHasAttribute(trendingTitle, modifiedAttr))
+    {
+        let toggle = trendingTitle.querySelector('#thd_toggleTrending');
+
+        if(toggle == null)
+        {
+            toggle = document.createElement('button');
+            toggle.innerText = hideStr;
+            toggle.id = "thd_toggleTrending";
+            toggle.style.borderRadius = "9999px";
+            toggle.style.borderStyle = "solid";
+            toggle.style.borderWidth = "1px";
+            toggle.style.borderColor = "#00000000";
+            toggle.style.backgroundColor = "#292828";
+            toggle.style.color = "#cdccc8";
+            toggle.addEventListener('click', (e) => {
+                var isHidden = toggle.innerText == hideStr;
+                setTrendingVisible(trendingBox, toggle, isHidden);
+            });
+            trendingTitle.appendChild(toggle);
+        }
+
+        setTrendingVisible(trendingBox, toggle, getUserPref(usePref_hideTrendingKey, true));
+        watchForChange(trendingBox, argsChildAndSub, setupTrendingControls);
+    }
+}
+
 async function onMainChange(main, mutations)
 {
     awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>
@@ -794,7 +835,10 @@ async function onMainChange(main, mutations)
       //  let section = awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub);
         awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => { LogMessage("region found"); watchForTimeline(primaryColumn, section); });
     });
-
+    awaitElem(main, 'div[data-testid="sidebarColumn"] section[role="region"] > [role="heading"]', argsChildAndSub).then((sideBarTrending) =>
+    {
+        setupTrendingControls(sideBarTrending.parentElement);
+    });
     if(isOnStatusPage())
     {
         LogMessage("on status page");
