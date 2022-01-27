@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.46
+// @version      1.48
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -46,37 +46,14 @@ addGlobalStyle('.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; 
 addGlobalStyle('.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; user-select: none;}');
 addGlobalStyle('.context-menu ul li:hover { background: #202020;}');
 
-/** Save/Load User Cutom Layout Width**/
+//<--> Save/Load User Cutom Layout Width <-->//
 const usePref_MainWidthKey = "thd_primaryWidth";
 const usePref_hideTrendingKey = "thd_hideTrending";
 const usePref_blurNSFW = "thd_blurNSFW";
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
-async function getUserPref(key, defaultVal)
-{
-  if(isGM) { return await GM.getValue(key, defaultVal); }
-  return await GM_getValue(key, defaultVal);
-}
-async function setUserPref(key, value)
-{
-  if(isGM) { return await GM.setValue(key, value); }
-	return await GM_setValue(key, value);
-}
-
-function LogMessage(text) { //console.log(text);
-}
-
-function addGlobalStyle(css) {
-    let head, style;
-    head = document.getElementsByTagName('head')[0];
-    if (!head) { return; }
-    style = document.createElement('style');
-    style.type = 'text/css';
-    style.innerHTML = css;
-    head.appendChild(style);
-    return style;
-}
+//<--> TWEET PROCESSING <-->//
 
 //Intercept m3u8 playlist requests and modify the contents to only include the highest quality
 (function(open)
@@ -99,15 +76,6 @@ function addGlobalStyle(css) {
         open.apply(this, arguments);
     };
 })(XMLHttpRequest.prototype.open);
-
-function download(url, filename)
-{
-    GM_download({
-        name: filename + getMediaFormat(url),
-        url: url,
-        onload: function() { /*LogMessage(`Downloaded ${url}!`);*/}
-    });
-}
 
 async function addDownloadButton(tweet, vidUrl, tweetInfo)
 {
@@ -161,72 +129,6 @@ async function addDownloadButton(tweet, vidUrl, tweetInfo)
     }
     $(dlBtn.parentNode).addClass(dlBtn.className);
     $(linkElem).click(function(e){ e.preventDefault(); e.stopPropagation(); download(vidUrl, filename); });
-}
-
-function addHasAttribute(elem, attr)
-{
-    if(elem.hasAttribute(attr)) { return true; }
-    elem.setAttribute(attr, "");
-    return false;
-}
-
-function isOnStatusPage() { return document.location.href.includes('/status/'); }
-
-function getUrlFromTweet(tweet)
-{
-    let curUrl = window.location.href;
-    if(curUrl.includes('/photo/')) { return curUrl; } //Probably viewing full-screen image
-
-    let article = tweet.tagName.toUpperCase() == 'ARTICLE' ? tweet : tweet.closest('article');
-
-    if(article == null) { return null; }
-
-    let postLink = article.querySelector('a:not([href*="/retweets"],[href$="/likes"])[href*="/status/"][role="link"][dir="auto"]');
-    let imgLink = article.querySelector('a:not([href*="/retweets"],[href$="/likes"],[dir="auto"])[href*="/status/"][role="link"]');
-
-    if(imgLink)
-    {
-        let statusLink = imgLink.href.split('/photo/')[0];
-        let imgUser = statusLink.split('/status/')[0];
-        if(postLink == null || !postLink.href.includes(imgUser)) { return statusLink; }
-    }
-
-    if(postLink) { return postLink.href; }
-
-    if(curUrl.includes('/status/')) { return curUrl; } //Last resort, not guranteed to actually be for the element in the timeline we are processing
-    return null;
-}
-
-function getTweetInfo(tweet)
-{
-    let link = getUrlFromTweet(tweet);
-    if(link == null) { return null; }
-    //LogMessage(link);
-
-    let url = link.split('?')[0];
-    let photoUrl = url.split('/photo/');
-    url = photoUrl[0];
-    const urlSplit = url.split('/status/');
-    const id = urlSplit[1].split('/')[0];
-
-    let username = urlSplit[0].split('/').pop();
-    let attributeTo = tweet.querySelector('div[aria-label]');
-    let elementIndex = -1;
-    if(photoUrl.length > 1) { elementIndex = parseInt(photoUrl[1]); LogMessage(url + " : " + photoUrl[1]); }
-
-    return { id: id, url: url, username: username, elemIndex: elementIndex }
-}
-
-function filenameFromTweetInfo(tweetInfo)
-{
-    let filename = tweetInfo.username + ' - ' + tweetInfo.id;
-    if(tweetInfo.elemIndex >= 0) { filename += '_' + tweetInfo.elemIndex.toString();}
-    return filename;
-}
-
-function getHighQualityImage(url)
-{
-    return url.replace(/(?<=[\&\?]name=)([A-Za-z0-9])+(?=\&)?/, 'orig');
 }
 
 function waitForImgLoad(img){
@@ -312,25 +214,7 @@ async function updateImageElements(tweet, imgLinks)
 
         let tweetInfo = getTweetInfo(tweet);
 
-        const blurBtn = tweet.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
-        if(blurBtn != null)
-        {
-            if(!nsfwBlur)
-            {
-                blurBtn.click();
-            }
-            blurBtn.style.display = nsfwBlur ? "block" : "none";
-
-            watchForChange(tweet, {attributes: false, childList: true, subtree: true}, (blurParent, mutes) => {
-                let curBlur = blurParent.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
-                if(addHasAttribute(curBlur, modifiedAttr)) { return; }
-
-                curBlur.style.display = nsfwBlur ? "block" : "none";
-                nsfwToggleChanged.addEventListener("nsfwToggleChanged", function(){ 
-                    curBlur?.click();
-                    curBlur.style.display = nsfwBlur ? "block" : "none";});
-            });
-        }
+        processBlurButton(tweet);
 
         const padder = imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement.querySelector('div[style^="padding-bottom"]');
         padder.parentElement.style = ""; //Get rid of static content size values
@@ -425,45 +309,6 @@ async function updateImageElements(tweet, imgLinks)
         doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + ratio + "%;";} )
         doOnAttributeChange(padder.parentElement, (padderParentElem) => { padderParentElem.style = "";} )
     }
-}
-
-function getVidURL(id)
-{
-    return new Promise((resolve, reject) =>
-    {
-        var init =
-        {
-            origin: 'https://mobile.twitter.com',
-            headers: {
-                "Accept": '*/*',
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:66.0) Gecko/20100101 Firefox/66.0",
-                "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
-                "x-csrf-token": cooky,
-            },
-            credentials: 'include',
-            referrer: 'https://mobile.twitter.com'
-        };
-        const fetchURL = "https://api.twitter.com/1.1/statuses/show.json?include_profile_interstitial_type=1&include_blocking=1&include_blocked_by=1&include_followed_by=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&skip_status=1&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&include_reply_count=1&tweet_mode=extended&trim_user=false&include_ext_media_color=true&id=";
-        try
-        {
-            fetch(fetchURL + id, init).then(function(response)
-            {
-                if (response.status == 200)
-                {
-                    response.json().then(function(json)
-                    {
-                        let entities = json.extended_entities;
-                        if(entities == undefined || entities == null) { resolve(null); }
-                        let mp4Variants = entities.media[0].video_info.variants.filter(variant => variant.content_type === 'video/mp4');
-                        mp4Variants = mp4Variants.sort((a, b) => (b.bitrate - a.bitrate));
-                        resolve((mp4Variants.length) ? mp4Variants[0].url : null);
-                        return;
-                    });
-                }
-                else { resolve(null); }
-            }).catch((err) => { reject({ error: err }); resolve(null); });
-        } catch (err) {resolve(null);}
-    });
 }
 
 function onLoadVideo (xmlDoc, tweetElem, tweetInfo)
@@ -626,115 +471,7 @@ async function listenForMediaType(tweet)
     tweetObserver.observe(tweet, {attributes: true, childList: true, subtree: true});
 }
 
-function onTimelineChange(addedNodes)
-{
-    //LogMessage("on timeline change");
-    if(addedNodes.length == 0 ) { LogMessage("no added nodes"); return; }
-    addedNodes.forEach((child) =>
-    {
-     //   if(addHasAttribute(child, modifiedAttr)) { return; }
-           awaitElem(child, 'ARTICLE', argsChildAndSub).then(listenForMediaType);
-      //  awaitElem(child, 'ARTICLE,ARTICLE '+ tweetQuery, argsChildAndSub).then(tweet => { listenForMediaType(tweet.parentElement); })
-    });
-}
-
-function observeTimeline(tl)
-{
-    if(!addHasAttribute(tl, "thd_observing_timeline"))
-    {
-        LogMessage("starting timeline observation");
-        const childNodes = Array.from(tl.childNodes);
-        onTimelineChange(childNodes);
-
-        watchForAddedNodes(tl, false, {attributes: false, childList: true, subtree: false}, onTimelineChange);
-    }
-}
-
-async function onTimelineContainerChange(container, mutations)
-{
-    LogMessage("on timeline container change");
-    let tl = await awaitElem(container, 'DIV[style*="position:"]', {childList: true, subtree: true, attributes: true});
-    observeTimeline(tl);
-}
-
-async function watchForTimeline(primaryColumn, section)
-{
-    const checkTimeline = async function()
-    {
-        let tl = await awaitElem(section, 'DIV[style*="position:"]', {childList: true, subtree: true, attributes: true});
-        let progBar = tl.querySelector('[role="progressbar"]');
-        if(progBar)
-        {
-           // Wait for an Article to show up before proceeding
-            LogMessage("Has Prog Bar, Awaiting Article");
-            let art = await awaitElem(section, "article", {childList: true, subtree: true, attributes: true});
-            LogMessage("Found Article");
-        }
-
-        let tlContainer = tl.parentElement;
-        if(!addHasAttribute(tlContainer, "thd_observing_timeline"))
-        {
-            observeTimeline(tl);
-            watchForChange(tlContainer, {attributes: false, childList: true}, (tlc, mutes) => { onTimelineContainerChange(tlc, mutes);} );
-        }
-
-    };
-
-    checkTimeline();
-
-    let progBarObserver = new MutationObserver((mutations) => {checkTimeline();});
-    progBarObserver.observe(section, {attributes: false, childList: true});
-}
-
-
-async function watchForAddedNodes(root, stopAfterFirstMutation, obsArguments, executeAfter)
-{
-    const rootObserver = new MutationObserver(
-        function(mutations)
-        {
-          //  LogMessage("timeline mutated");
-            mutations.forEach(function(mutation) {
-                if(mutation.addedNodes == null || mutation.addedNodes.length == 0) { return; }
-                if(stopAfterFirstMutation) { rootObserver.disconnect(); }
-                executeAfter(mutation.addedNodes);
-            });
-
-        });
-
-    rootObserver.observe(root, obsArguments);
-}
-
-function findElem(rootElem, query, observer, resolve)
-{
-    const elem = rootElem.querySelector(query);
-    if(elem != null && elem != undefined)
-    {
-        resolve(elem);
-        observer?.disconnect();
-    }
-    return elem;
-}
-
-async function awaitElem(root, query, obsArguments)
-{
-     return new Promise((resolve, reject) =>
-     {
-         if(findElem(root, query, null, resolve)) { return; }
-         const rootObserver = new MutationObserver((mutes, obs) => { findElem(root, query, obs, resolve); } );
-         rootObserver.observe(root, obsArguments);
-    });
-}
-
-function doOnAttributeChange(elem, onChange, repeatOnce = false)
-{
-      let rootObserver = new MutationObserver((mutes, obvs) => {
-          obvs.disconnect();
-          onChange(elem);
-          if(repeatOnce == true) { return; }
-          obvs.observe(elem, {childList: false, subtree: false, attributes: true})
-      });
-    rootObserver.observe(elem, {childList: false, subtree: false, attributes: true});
-}
+//<--> TIMELINE PROCESSING <-->//
 
 var primaryColumnCursorDistToEdge = 900;
 var primaryColumnMouseDownPos = 0;
@@ -796,26 +533,152 @@ function updateLayoutWidth(width, finalize)
     }
 }
 
+async function onTimelineContainerChange(container, mutations)
+{
+    LogMessage("on timeline container change");
+    let tl = await awaitElem(container, 'DIV[style*="position:"]', {childList: true, subtree: true, attributes: true});
+    observeTimeline(tl);
+}
+
+function onTimelineChange(addedNodes)
+{
+    //LogMessage("on timeline change");
+    if(addedNodes.length == 0 ) { LogMessage("no added nodes"); return; }
+    addedNodes.forEach((child) =>
+                       {
+        //   if(addHasAttribute(child, modifiedAttr)) { return; }
+        awaitElem(child, 'ARTICLE', argsChildAndSub).then(listenForMediaType);
+        //  awaitElem(child, 'ARTICLE,ARTICLE '+ tweetQuery, argsChildAndSub).then(tweet => { listenForMediaType(tweet.parentElement); })
+    });
+}
+
+function observeTimeline(tl)
+{
+    if(!addHasAttribute(tl, "thd_observing_timeline"))
+    {
+        LogMessage("starting timeline observation");
+        const childNodes = Array.from(tl.childNodes);
+        onTimelineChange(childNodes);
+
+        watchForAddedNodes(tl, false, {attributes: false, childList: true, subtree: false}, onTimelineChange);
+    }
+}
+
+async function watchForTimeline(primaryColumn, section)
+{
+    const checkTimeline = async function()
+    {
+        let tl = await awaitElem(section, 'DIV[style*="position:"]', {childList: true, subtree: true, attributes: true});
+        let progBar = tl.querySelector('[role="progressbar"]');
+        if(progBar)
+        {
+            // Wait for an Article to show up before proceeding
+            LogMessage("Has Prog Bar, Awaiting Article");
+            let art = await awaitElem(section, "article", {childList: true, subtree: true, attributes: true});
+            LogMessage("Found Article");
+        }
+
+        let tlContainer = tl.parentElement;
+        if(!addHasAttribute(tlContainer, "thd_observing_timeline"))
+        {
+            observeTimeline(tl);
+            watchForChange(tlContainer, {attributes: false, childList: true}, (tlc, mutes) => { onTimelineContainerChange(tlc, mutes);} );
+        }
+
+    };
+
+    checkTimeline();
+
+    let progBarObserver = new MutationObserver((mutations) => {checkTimeline();});
+    progBarObserver.observe(section, {attributes: false, childList: true});
+}
+
+async function onMainChange(main, mutations)
+{
+    awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>
+    {
+        if(addHasAttribute(primaryColumn, modifiedAttr)) { return; }
+        var pageWidthLayoutRule = getCSSRuleContainingStyle('width', (("." + main.className).replace(' ', ' .')).split(' '));
+        pageWidthLayoutRule.style.setProperty('width', "100%");
+
+        let primaryColumnGrp = primaryColumn.parentElement.parentElement;
+        let columnClassNames = ("." + primaryColumn.className.replace(" ", " .")).split(' ');
+
+        maxWidthClass = getCSSRuleContainingStyle("max-width", columnClassNames);
+        getUserPref(usePref_MainWidthKey, 600).then((userWidth) => updateLayoutWidth(userWidth, true));
+
+        primaryColumnGrp.addEventListener('mousemove', (e) => { primaryColumnResizer(primaryColumn, e, false, false) });
+        primaryColumnGrp.addEventListener('mousedown', (e) => { primaryColumnResizer(primaryColumn, e, true, false) });
+        window.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
+        document.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
+      //  let section = awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub);
+        awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => { LogMessage("region found"); watchForTimeline(primaryColumn, section); });
+    });
+    awaitElem(main, 'div[data-testid="sidebarColumn"]', argsChildAndSub).then((sideBar) => {
+
+        awaitElem(sideBar, 'section[role="region"] > [role="heading"]', argsChildAndSub).then((sideBarTrending) => {
+            setupTrendingControls(sideBarTrending.parentElement);
+            setupNSFWToggle(sideBar);
+        });
+    });
+    if(isOnStatusPage())
+    {
+        LogMessage("on status page");
+        awaitElem(main, tweetQuery, argsChildAndSub).then((tweet) => { listenForMediaType(tweet.parentElement); });
+    }
+}
+
+//<--> RIGHT SIDEBAR CONTENT <-->//
+
 let nsfwBlur = true;
 var nsfwToggle = null;
 var nsfwToggleChanged = new EventTarget();
 
 async function setupNSFWToggle(sidePanel)
 {
+    nsfwBlur = await getUserPref(usePref_blurNSFW, false);
     nsfwToggle = sidePanel.querySelector('#thd_nsfwToggle');
 
     if(nsfwToggle == null)
     {
+
         nsfwToggle = createToggleButton(nsfwBlur ? "NSFW Blur ON" : "NSFW Blur OFF", "thd_nsfwToggle");
         nsfwToggle.marginBottom = "10px";
         nsfwToggle.addEventListener('click', (e) => {
+            console.log("clicked blur button");
                 nsfwBlur = nsfwBlur ? false : true;
                 setUserPref(usePref_blurNSFW, nsfwBlur);
+console.log(nsfwBlur);
                 nsfwToggleChanged.dispatchEvent(new Event('nsfwToggleChanged'));
             nsfwToggle.innerHTML = nsfwBlur ? "NSFW Blur ON" : "NSFW Blur OFF";
+            console.log(nsfwToggle);
             });
 
         const footer = sidePanel.querySelector('nav').parentElement.appendChild(nsfwToggle);
+    }
+}
+
+async function processBlurButton(tweet)
+{
+    const blurBtn = tweet.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
+
+    if(blurBtn != null)
+    {
+        if(!nsfwBlur)
+        {
+            blurBtn.click();
+        }
+        blurBtn.style.display = nsfwBlur ? "block" : "none";
+
+        watchForChange(tweet, {attributes: false, childList: true, subtree: true}, (blurParent, mutes) => {
+            const curBlur = blurParent.querySelector('div[role="button"][style^="backdrop-filter: blur"]')
+            if(addHasAttribute(curBlur, modifiedAttr)) { return; }
+            curBlur.style.display = nsfwBlur ? "block" : "none";
+            nsfwToggleChanged.addEventListener("nsfwToggleChanged", function(){
+                curBlur?.click();
+                curBlur.style.display = nsfwBlur ? "block" : "none";
+            });
+        });
     }
 }
 
@@ -866,50 +729,7 @@ function createToggleButton(text, id)
     return btn;
 }
 
-async function onMainChange(main, mutations)
-{
-    awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>
-    {
-        if(addHasAttribute(primaryColumn, modifiedAttr)) { return; }
-        var pageWidthLayoutRule = getCSSRuleContainingStyle('width', (("." + main.className).replace(' ', ' .')).split(' '));
-        pageWidthLayoutRule.style.setProperty('width', "100%");
-
-        let primaryColumnGrp = primaryColumn.parentElement.parentElement;
-        let columnClassNames = ("." + primaryColumn.className.replace(" ", " .")).split(' ');
-
-        maxWidthClass = getCSSRuleContainingStyle("max-width", columnClassNames);
-        getUserPref(usePref_MainWidthKey, 600).then((userWidth) => updateLayoutWidth(userWidth, true));
-
-        primaryColumnGrp.addEventListener('mousemove', (e) => { primaryColumnResizer(primaryColumn, e, false, false) });
-        primaryColumnGrp.addEventListener('mousedown', (e) => { primaryColumnResizer(primaryColumn, e, true, false) });
-        window.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
-        document.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
-      //  let section = awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub);
-        awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => { LogMessage("region found"); watchForTimeline(primaryColumn, section); });
-    });
-    awaitElem(main, 'div[data-testid="sidebarColumn"]', argsChildAndSub).then((sideBar) => {
-
-        awaitElem(sideBar, 'section[role="region"] > [role="heading"]', argsChildAndSub).then((sideBarTrending) => {
-            setupTrendingControls(sideBarTrending.parentElement);
-            setupNSFWToggle(sideBar);
-        });
-    });
-    if(isOnStatusPage())
-    {
-        LogMessage("on status page");
-        awaitElem(main, tweetQuery, argsChildAndSub).then((tweet) => { listenForMediaType(tweet.parentElement); });
-    }
-}
-
-async function updateFullViewImage(img, tweetInfo)
-{
-    if(addHasAttribute(img, "thd_modified")) { return; }
-    let bg = img.parentElement.querySelector('div');
-    let hqSrc = getHighQualityImage(img.src);
-    addCustomCtxMenu(img, hqSrc, tweetInfo, img);
-    updateImgSrc(img, bg, hqSrc);
-    doOnAttributeChange(img, (imgElem) => {updateImgSrc(imgElem, bg, hqSrc);}, false);
-}
+//<--> FULL-SCREEN IMAGE VIEW RELATED <-->//
 
 async function onLayersChange(layers, mutation)
 {
@@ -942,52 +762,17 @@ async function onLayersChange(layers, mutation)
     }
 }
 
-async function watchForChange(root, obsArguments, onChange)
+async function updateFullViewImage(img, tweetInfo)
 {
-    const rootObserver = new MutationObserver(function(mutations) {
-        mutations.forEach((mutation) => onChange(root, mutation));
-    });
-    rootObserver.observe(root, obsArguments);
-}
-//Because Firefox doesn't assume the format unlike Chrome...
-function getMediaFormat(url)
-{
-    let end = url.split('/').pop();
-    let periodSplit = end.split('.');
-    if(periodSplit.length > 1)
-    {
-        return '.' + periodSplit.pop().split('?')[0];
-    }
-    if(url.includes('format='))
-    {
-        let params = url.split('?').pop().split('&');
-        for(let p = 0; p < params.length; p++)
-        {
-            if(params[p].includes('format'))
-            {
-                return '.' + params[p].split('=').pop().split('?')[0];
-            }
-        }
-    }
-
-    return '';
+    if(addHasAttribute(img, "thd_modified")) { return; }
+    let bg = img.parentElement.querySelector('div');
+    let hqSrc = getHighQualityImage(img.src);
+    addCustomCtxMenu(img, hqSrc, tweetInfo, img);
+    updateImgSrc(img, bg, hqSrc);
+    doOnAttributeChange(img, (imgElem) => {updateImgSrc(imgElem, bg, hqSrc);}, false);
 }
 
-function isDirectImagePage(url) //Checks if webpage we're on is a direct image view
-{
-    if(url.includes('/media/') && url.includes('format=') && url.includes('name='))
-    {
-        if(!url.includes('name=orig'))
-        {
-            const hqUrl = getHighQualityImage(url);
-            window.location.href = getHighQualityImage(url);
-        }
-        return true;
-    }
-    return false;
-}
-
-/** RIGHT-CLICK CONTEXT MENU STUFF START **/
+//<--> RIGHT-CLICK CONTEXT MENU STUFF START <-->//
 
 const ctxMenu = document.createElement('div');
 ctxMenu.id = "contextMenu";
@@ -1100,6 +885,225 @@ function addCustomCtxMenu(elem, dlLink, tweetInfo, img)
     }, false);
 }
 
+//<--> TWITTER UTILITY FUNCTIONS <-->//
+
+//Because Firefox doesn't assume the format unlike Chrome...
+function getMediaFormat(url)
+{
+    let end = url.split('/').pop();
+    let periodSplit = end.split('.');
+    if(periodSplit.length > 1)
+    {
+        return '.' + periodSplit.pop().split('?')[0];
+    }
+    if(url.includes('format='))
+    {
+        let params = url.split('?').pop().split('&');
+        for(let p = 0; p < params.length; p++)
+        {
+            if(params[p].includes('format'))
+            {
+                return '.' + params[p].split('=').pop().split('?')[0];
+            }
+        }
+    }
+
+    return '';
+}
+
+function isDirectImagePage(url) //Checks if webpage we're on is a direct image view
+{
+    if(url.includes('/media/') && url.includes('format=') && url.includes('name='))
+    {
+        if(!url.includes('name=orig'))
+        {
+            const hqUrl = getHighQualityImage(url);
+            window.location.href = getHighQualityImage(url);
+        }
+        return true;
+    }
+    return false;
+}
+
+function isOnStatusPage() { return document.location.href.includes('/status/'); }
+
+function download(url, filename)
+{
+    GM_download({
+        name: filename + getMediaFormat(url),
+        url: url,
+        onload: function() { /*LogMessage(`Downloaded ${url}!`);*/}
+    });
+}
+
+function getUrlFromTweet(tweet)
+{
+    let curUrl = window.location.href;
+    if(curUrl.includes('/photo/')) { return curUrl; } //Probably viewing full-screen image
+
+    let article = tweet.tagName.toUpperCase() == 'ARTICLE' ? tweet : tweet.closest('article');
+
+    if(article == null) { return null; }
+
+    let postLink = article.querySelector('a:not([href*="/retweets"],[href$="/likes"])[href*="/status/"][role="link"][dir="auto"]');
+    let imgLink = article.querySelector('a:not([href*="/retweets"],[href$="/likes"],[dir="auto"])[href*="/status/"][role="link"]');
+
+    if(imgLink)
+    {
+        let statusLink = imgLink.href.split('/photo/')[0];
+        let imgUser = statusLink.split('/status/')[0];
+        if(postLink == null || !postLink.href.includes(imgUser)) { return statusLink; }
+    }
+
+    if(postLink) { return postLink.href; }
+
+    if(curUrl.includes('/status/')) { return curUrl; } //Last resort, not guranteed to actually be for the element in the timeline we are processing
+    return null;
+}
+
+function getTweetInfo(tweet)
+{
+    let link = getUrlFromTweet(tweet);
+    if(link == null) { return null; }
+    //LogMessage(link);
+
+    let url = link.split('?')[0];
+    let photoUrl = url.split('/photo/');
+    url = photoUrl[0];
+    const urlSplit = url.split('/status/');
+    const id = urlSplit[1].split('/')[0];
+
+    let username = urlSplit[0].split('/').pop();
+    let attributeTo = tweet.querySelector('div[aria-label]');
+    let elementIndex = -1;
+    if(photoUrl.length > 1) { elementIndex = parseInt(photoUrl[1]); LogMessage(url + " : " + photoUrl[1]); }
+
+    return { id: id, url: url, username: username, elemIndex: elementIndex }
+}
+
+function filenameFromTweetInfo(tweetInfo)
+{
+    let filename = tweetInfo.username + ' - ' + tweetInfo.id;
+    if(tweetInfo.elemIndex >= 0) { filename += '_' + tweetInfo.elemIndex.toString();}
+    return filename;
+}
+
+function getHighQualityImage(url)
+{
+    return url.replace(/(?<=[\&\?]name=)([A-Za-z0-9])+(?=\&)?/, 'orig');
+}
+
+function getVidURL(id)
+{
+    return new Promise((resolve, reject) =>
+    {
+        var init =
+        {
+            origin: 'https://mobile.twitter.com',
+            headers: {
+                "Accept": '*/*',
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:66.0) Gecko/20100101 Firefox/66.0",
+                "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+                "x-csrf-token": cooky,
+            },
+            credentials: 'include',
+            referrer: 'https://mobile.twitter.com'
+        };
+        const fetchURL = "https://api.twitter.com/1.1/statuses/show.json?include_profile_interstitial_type=1&include_blocking=1&include_blocked_by=1&include_followed_by=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&skip_status=1&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&include_reply_count=1&tweet_mode=extended&trim_user=false&include_ext_media_color=true&id=";
+        try
+        {
+            fetch(fetchURL + id, init).then(function(response)
+            {
+                if (response.status == 200)
+                {
+                    response.json().then(function(json)
+                    {
+                        let entities = json.extended_entities;
+                        if(entities == undefined || entities == null) { resolve(null); }
+                        let mp4Variants = entities.media[0].video_info.variants.filter(variant => variant.content_type === 'video/mp4');
+                        mp4Variants = mp4Variants.sort((a, b) => (b.bitrate - a.bitrate));
+                        resolve((mp4Variants.length) ? mp4Variants[0].url : null);
+                        return;
+                    });
+                }
+                else { resolve(null); }
+            }).catch((err) => { reject({ error: err }); resolve(null); });
+        } catch (err) {resolve(null);}
+    });
+}
+
+//<--> GENERIC UTILITY FUNCTIONS <-->//
+async function watchForChange(root, obsArguments, onChange)
+{
+    const rootObserver = new MutationObserver(function(mutations) {
+        mutations.forEach((mutation) => onChange(root, mutation));
+    });
+    rootObserver.observe(root, obsArguments);
+}
+
+async function watchForAddedNodes(root, stopAfterFirstMutation, obsArguments, executeAfter)
+{
+    const rootObserver = new MutationObserver(
+        function(mutations)
+        {
+          //  LogMessage("timeline mutated");
+            mutations.forEach(function(mutation) {
+                if(mutation.addedNodes == null || mutation.addedNodes.length == 0) { return; }
+                if(stopAfterFirstMutation) { rootObserver.disconnect(); }
+                executeAfter(mutation.addedNodes);
+            });
+
+        });
+
+    rootObserver.observe(root, obsArguments);
+}
+
+function findElem(rootElem, query, observer, resolve)
+{
+    const elem = rootElem.querySelector(query);
+    if(elem != null && elem != undefined)
+    {
+        resolve(elem);
+        observer?.disconnect();
+    }
+    return elem;
+}
+
+async function awaitElem(root, query, obsArguments)
+{
+     return new Promise((resolve, reject) =>
+     {
+         if(findElem(root, query, null, resolve)) { return; }
+         const rootObserver = new MutationObserver((mutes, obs) => { findElem(root, query, obs, resolve); } );
+         rootObserver.observe(root, obsArguments);
+    });
+}
+
+function doOnAttributeChange(elem, onChange, repeatOnce = false)
+{
+    let rootObserver = new MutationObserver((mutes, obvs) => {
+        obvs.disconnect();
+        onChange(elem);
+        if(repeatOnce == true) { return; }
+        obvs.observe(elem, {childList: false, subtree: false, attributes: true})
+    });
+    rootObserver.observe(elem, {childList: false, subtree: false, attributes: true});
+}
+
+function addHasAttribute(elem, attr)
+{
+    if(elem.hasAttribute(attr)) { return true; }
+    elem.setAttribute(attr, "");
+    return false;
+}
+
+function getCookie(name)
+{
+    var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    if(match) { return match[2].toString(); }
+    return null;
+}
+
 function getCSSRuleContainingStyle(styleName, selectors)
 {
     var sheets = document.styleSheets;
@@ -1126,15 +1130,31 @@ function getCSSRuleContainingStyle(styleName, selectors)
     return null;
 }
 
-/** RIGHT-CLICK CONTEXT MENU STUFF END **/
-
-function getCookie(name)
+async function getUserPref(key, defaultVal)
 {
-    var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-    if(match) { return match[2].toString(); }
-    return null;
+  if(isGM) { return await GM.getValue(key, defaultVal); }
+  return await GM_getValue(key, defaultVal);
+}
+async function setUserPref(key, value)
+{
+  if(isGM) { return await GM.setValue(key, value); }
+	return await GM_setValue(key, value);
 }
 
+function LogMessage(text) { /*console.log(text);*/ }
+
+function addGlobalStyle(css) {
+    let head, style;
+    head = document.getElementsByTagName('head')[0];
+    if (!head) { return; }
+    style = document.createElement('style');
+    style.type = 'text/css';
+    style.innerHTML = css;
+    head.appendChild(style);
+    return style;
+}
+
+//<--> BEGIN PROCESSING <-->//
 (async function() {
     'use strict';
     if(isDirectImagePage(window.location.href)) { return; }
@@ -1142,7 +1162,6 @@ function getCookie(name)
     NodeList.prototype.forEach = Array.prototype.forEach;
 
     let isIframe = document.body.querySelector('div#app');
-    nsfwBlur = await getUserPref(usePref_blurNSFW, false);
 
     if(isIframe != null)
     {
