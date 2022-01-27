@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.44
+// @version      1.46
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -49,6 +49,7 @@ addGlobalStyle('.context-menu ul li:hover { background: #202020;}');
 /** Save/Load User Cutom Layout Width**/
 const usePref_MainWidthKey = "thd_primaryWidth";
 const usePref_hideTrendingKey = "thd_hideTrending";
+const usePref_blurNSFW = "thd_blurNSFW";
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
@@ -310,6 +311,27 @@ async function updateImageElements(tweet, imgLinks)
         if(addHasAttribute(imgLinks[0], modifiedAttr)) { return; }
 
         let tweetInfo = getTweetInfo(tweet);
+
+        const blurBtn = tweet.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
+        if(blurBtn != null)
+        {
+            if(!nsfwBlur)
+            {
+                blurBtn.click();
+            }
+            blurBtn.style.display = nsfwBlur ? "block" : "none";
+
+            watchForChange(tweet, {attributes: false, childList: true, subtree: true}, (blurParent, mutes) => {
+                let curBlur = blurParent.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
+                if(addHasAttribute(curBlur, modifiedAttr)) { return; }
+
+                curBlur.style.display = nsfwBlur ? "block" : "none";
+                nsfwToggleChanged.addEventListener("nsfwToggleChanged", function(){ 
+                    curBlur?.click();
+                    curBlur.style.display = nsfwBlur ? "block" : "none";});
+            });
+        }
+
         const padder = imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement.querySelector('div[style^="padding-bottom"]');
         padder.parentElement.style = ""; //Get rid of static content size values
         const flexer = padder.closest('div[id^="id_"] > div').style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
@@ -774,6 +796,29 @@ function updateLayoutWidth(width, finalize)
     }
 }
 
+let nsfwBlur = true;
+var nsfwToggle = null;
+var nsfwToggleChanged = new EventTarget();
+
+async function setupNSFWToggle(sidePanel)
+{
+    nsfwToggle = sidePanel.querySelector('#thd_nsfwToggle');
+
+    if(nsfwToggle == null)
+    {
+        nsfwToggle = createToggleButton(nsfwBlur ? "NSFW Blur ON" : "NSFW Blur OFF", "thd_nsfwToggle");
+        nsfwToggle.marginBottom = "10px";
+        nsfwToggle.addEventListener('click', (e) => {
+                nsfwBlur = nsfwBlur ? false : true;
+                setUserPref(usePref_blurNSFW, nsfwBlur);
+                nsfwToggleChanged.dispatchEvent(new Event('nsfwToggleChanged'));
+            nsfwToggle.innerHTML = nsfwBlur ? "NSFW Blur ON" : "NSFW Blur OFF";
+            });
+
+        const footer = sidePanel.querySelector('nav').parentElement.appendChild(nsfwToggle);
+    }
+}
+
 async function setupTrendingControls(trendingBox)
 {
     const showStr = "Show";
@@ -794,15 +839,7 @@ async function setupTrendingControls(trendingBox)
 
         if(toggle == null)
         {
-            toggle = document.createElement('button');
-            toggle.innerText = hideStr;
-            toggle.id = "thd_toggleTrending";
-            toggle.style.borderRadius = "9999px";
-            toggle.style.borderStyle = "solid";
-            toggle.style.borderWidth = "1px";
-            toggle.style.borderColor = "#00000000";
-            toggle.style.backgroundColor = "#292828";
-            toggle.style.color = "#cdccc8";
+            toggle = createToggleButton(hideStr, "thd_toggleTrending");
             toggle.addEventListener('click', (e) => {
                 var isHidden = toggle.innerText == hideStr;
                 setTrendingVisible(trendingBox, toggle, isHidden);
@@ -813,6 +850,20 @@ async function setupTrendingControls(trendingBox)
         setTrendingVisible(trendingBox, toggle, getUserPref(usePref_hideTrendingKey, true));
         watchForChange(trendingBox, argsChildAndSub, setupTrendingControls);
     }
+}
+
+function createToggleButton(text, id)
+{
+    const btn = document.createElement('button');
+    btn.innerText = text;
+    btn.id = id;
+    btn.style.borderRadius = "9999px";
+    btn.style.borderStyle = "solid";
+    btn.style.borderWidth = "1px";
+    btn.style.borderColor = "#00000000";
+    btn.style.backgroundColor = "#292828";
+    btn.style.color = "#cdccc8";
+    return btn;
 }
 
 async function onMainChange(main, mutations)
@@ -836,9 +887,12 @@ async function onMainChange(main, mutations)
       //  let section = awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub);
         awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => { LogMessage("region found"); watchForTimeline(primaryColumn, section); });
     });
-    awaitElem(main, 'div[data-testid="sidebarColumn"] section[role="region"] > [role="heading"]', argsChildAndSub).then((sideBarTrending) =>
-    {
-        setupTrendingControls(sideBarTrending.parentElement);
+    awaitElem(main, 'div[data-testid="sidebarColumn"]', argsChildAndSub).then((sideBar) => {
+
+        awaitElem(sideBar, 'section[role="region"] > [role="heading"]', argsChildAndSub).then((sideBarTrending) => {
+            setupTrendingControls(sideBarTrending.parentElement);
+            setupNSFWToggle(sideBar);
+        });
     });
     if(isOnStatusPage())
     {
@@ -1088,6 +1142,7 @@ function getCookie(name)
     NodeList.prototype.forEach = Array.prototype.forEach;
 
     let isIframe = document.body.querySelector('div#app');
+    nsfwBlur = await getUserPref(usePref_blurNSFW, false);
 
     if(isIframe != null)
     {
