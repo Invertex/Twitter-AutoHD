@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.48
+// @version      1.50
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -19,7 +19,7 @@
 // @grant GM_getValue
 // @grant GM.setValue
 // @grant GM.getValue
-// @run-at document-body
+// @run-at document-start
 // @require https://ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js
 // ==/UserScript==
 
@@ -53,7 +53,54 @@ const usePref_blurNSFW = "thd_blurNSFW";
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
+
 //<--> TWEET PROCESSING <-->//
+function StringBuilder(value) {
+    this.strings = new Array();
+    this.append(value);
+}
+StringBuilder.prototype.append = function(value) {
+    if (value) {
+        this.strings.push(value);
+    }
+}
+StringBuilder.prototype.clear = function() {
+    this.strings.length = 0;
+}
+StringBuilder.prototype.toString = function() {
+    return this.strings.join("");
+}
+
+const sb = new StringBuilder("");
+
+const BuildM3U = function(lines)
+{
+    const regex = /,BANDWIDTH=(.*),RESOLUTION/gm;
+
+    let bestLine = 0;
+    let bestBandwidth = 0;
+    sb.append(lines[0]);
+
+    for(let i = 1; i < lines.length; i++)
+    {
+        if(!lines[i].includes('STREAM-INF:')) { sb.append('#' + lines[i]); }
+        else
+        {
+            let bandwidth = parseInt(regex.exec(lines[i]));
+            if(bandwidth > bestBandwidth)
+            {
+                bestBandwidth = bandwidth;
+                bestLine = i;
+            } else if (bestLine === 0) { bestLine = i; } //failsafe in case something breaks with parsing down the line
+        }
+    }
+
+    sb.append('#' + lines[bestLine]);
+    let m3u = sb.toString();
+    sb.clear();
+
+    return m3u;
+};
 
 //Intercept m3u8 playlist requests and modify the contents to only include the highest quality
 (function(open)
@@ -67,9 +114,10 @@ const isGM = (typeof GM_addValueChangeListener === 'undefined');
                 if(this.readyState === 4)
                 {
 					const lines = e.target.responseText.split('#');
+                    const m3u = BuildM3U(lines);
                     Object.defineProperty(this, 'response', {writable: true});
                     Object.defineProperty(this, 'responseText', {writable: true});
-                    this.response = this.responseText = '#' + lines[1] + '#' + lines[lines.length - 1];
+                    this.response = this.responseText = m3u;
                 }
             });
         }
@@ -1160,7 +1208,8 @@ function addGlobalStyle(css) {
     if(isDirectImagePage(window.location.href)) { return; }
 
     NodeList.prototype.forEach = Array.prototype.forEach;
-
+	
+	await awaitElem(document, 'BODY', argsChildAndSub);
     let isIframe = document.body.querySelector('div#app');
 
     if(isIframe != null)
