@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.50
+// @version      1.52
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -30,7 +30,7 @@ const tweetQuery = 'div[data-testid="tweet"]';
 const GM_OpenInTabMissing = (typeof GM_openInTab === 'undefined');
 
 var vids = new Map(); //Cache download links for tweets we've already processed this session to reduce API timeout potential and speed-up button creation when the same media is loaded onto timeline again
-
+///
 const argsChildAndSub = {attributes: false, childList: true, subtree: true};
 const argsChildOnly = {attributes: false, childList: true, subtree: false};
 const argsChildAndAttr = {attributes: true, childList: true, subtree: false};
@@ -457,12 +457,15 @@ async function replaceVideoElement(tweet, vidElem)
 
 function mediaExists(tweet, tweetObserver)
 {
+
     if(tweet == null /*|| (!isOStatusPage() && tweet.querySelector('div[data-testid="placementTracking"]') == null)*/) { return false; } //If video, should have placementTracking after first mutation
     if(tweet.querySelector(`[${modifiedAttr}]`)) { return true; }
     let video = tweet.querySelector('video');
 
     if(video != null) //is video
     {
+        processBlurButton(tweet);
+
         if(replaceVideoElement(tweet, video))
         {
             tweetObserver?.disconnect();
@@ -693,14 +696,11 @@ async function setupNSFWToggle(sidePanel)
         nsfwToggle = createToggleButton(nsfwBlur ? "NSFW Blur ON" : "NSFW Blur OFF", "thd_nsfwToggle");
         nsfwToggle.marginBottom = "10px";
         nsfwToggle.addEventListener('click', (e) => {
-            console.log("clicked blur button");
-                nsfwBlur = nsfwBlur ? false : true;
-                setUserPref(usePref_blurNSFW, nsfwBlur);
-console.log(nsfwBlur);
-                nsfwToggleChanged.dispatchEvent(new Event('nsfwToggleChanged'));
+            nsfwBlur = nsfwBlur ? false : true;
+            setUserPref(usePref_blurNSFW, nsfwBlur);
+            nsfwToggleChanged.dispatchEvent(new Event('nsfwToggleChanged'));
             nsfwToggle.innerHTML = nsfwBlur ? "NSFW Blur ON" : "NSFW Blur OFF";
-            console.log(nsfwToggle);
-            });
+        });
 
         const footer = sidePanel.querySelector('nav').parentElement.appendChild(nsfwToggle);
     }
@@ -716,13 +716,15 @@ async function processBlurButton(tweet)
         {
             blurBtn.click();
         }
+
         blurBtn.style.display = nsfwBlur ? "block" : "none";
 
         watchForChange(tweet, {attributes: false, childList: true, subtree: true}, (blurParent, mutes) => {
-            const curBlur = blurParent.querySelector('div[role="button"][style^="backdrop-filter: blur"]')
+            const curBlur = blurParent.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
+            if(curBlur == null) { return; }
             if(addHasAttribute(curBlur, modifiedAttr)) { return; }
             curBlur.style.display = nsfwBlur ? "block" : "none";
-            nsfwToggleChanged.addEventListener("nsfwToggleChanged", function(){
+            nsfwToggleChanged.addEventListener("nsfwToggleChanged", function() {
                 curBlur?.click();
                 curBlur.style.display = nsfwBlur ? "block" : "none";
             });
@@ -757,9 +759,11 @@ async function setupTrendingControls(trendingBox)
             });
             trendingTitle.appendChild(toggle);
         }
+        getUserPref(usePref_hideTrendingKey, true).then((visible) => {
+            setTrendingVisible(trendingBox, toggle, visible);
+            watchForChange(trendingBox, argsChildAndSub, setupTrendingControls);
+        });
 
-        setTrendingVisible(trendingBox, toggle, getUserPref(usePref_hideTrendingKey, true));
-        watchForChange(trendingBox, argsChildAndSub, setupTrendingControls);
     }
 }
 
@@ -1203,12 +1207,18 @@ function addGlobalStyle(css) {
 }
 
 //<--> BEGIN PROCESSING <-->//
+
+async function LoadPrefs()
+{
+    getUserPref(usePref_blurNSFW, false).then((res) => {nsfwBlur = res;});
+}
+
 (async function() {
     'use strict';
     if(isDirectImagePage(window.location.href)) { return; }
 
     NodeList.prototype.forEach = Array.prototype.forEach;
-	
+	LoadPrefs();
 	await awaitElem(document, 'BODY', argsChildAndSub);
     let isIframe = document.body.querySelector('div#app');
 
