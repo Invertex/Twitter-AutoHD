@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.52
+// @version      1.53
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -264,8 +264,9 @@ async function updateImageElements(tweet, imgLinks)
 
         processBlurButton(tweet);
 
-        const padder = imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement.querySelector('div[style^="padding-bottom"]');
+        const padder = await awaitElem(imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement, 'div[style^="padding-bottom"]');
         padder.parentElement.style = ""; //Get rid of static content size values
+
         const flexer = padder.closest('div[id^="id_"] > div').style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
 
         const images = [];
@@ -354,6 +355,12 @@ async function updateImageElements(tweet, imgLinks)
             doOnAttributeChange(curImg.layoutContainer, () => { updateImgSrc(curImg, curImg.bgElem, curImg.hqSrc) });
         }
 
+        //Annoying Edge....edge-case. Have to find this random class name generated element and remove its align so that elements will expand fully into the feed column
+        var edgeCase = getCSSRuleContainingStyle('align-self', ['.r-'], 0, 'flex-start');
+        if(edgeCase != null)
+        {
+            edgeCase.style.setProperty('align-self', "inherit");
+        }
         doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + ratio + "%;";} )
         doOnAttributeChange(padder.parentElement, (padderParentElem) => { padderParentElem.style = "";} )
     }
@@ -1156,24 +1163,29 @@ function getCookie(name)
     return null;
 }
 
-function getCSSRuleContainingStyle(styleName, selectors)
+function getCSSRuleContainingStyle(styleName, selectors, styleCnt = 0, matchingValue = "")
 {
     var sheets = document.styleSheets;
     for (var i = 0, l = sheets.length; i < l; i++)
     {
         var curSheet = sheets[i];
+
         if( !curSheet.cssRules ) { continue; }
 
         for (var j = 0, k = curSheet.cssRules.length; j < k; j++)
         {
             var rule = curSheet.cssRules[j];
+            if(styleCnt != 0 && styleCnt != rule.style.length) { return null; }
             if (rule.selectorText && rule.style.length > 0/* && rule.selectorText.split(',').indexOf(selector) !== -1*/)
             {
                 for(var s = 0; s < selectors.length; s++)
                 {
                     if(rule.selectorText.includes(selectors[s]) && rule.style[0] == styleName)
                     {
-                        return rule;
+                        if(matchingValue === "" || matchingValue == rule.style[styleName])
+                        {
+                            return rule;
+                        }
                     }
                 }
             }
@@ -1231,7 +1243,7 @@ async function LoadPrefs()
     const main = await awaitElem(reactRoot, 'main[role="main"] div', argsChildAndSub);
 
     let layers = reactRoot.querySelector('div#layers');
-    if(layers) { LogMessage("Found Layers"); }
+
     awaitElem(reactRoot, 'div#layers', argsChildAndSub).then((layers) => {
         if(!addHasAttribute(layers, "watchingLayers")) { watchForChange(layers, {childList: true, subtree: true}, onLayersChange); }
     });
@@ -1239,4 +1251,5 @@ async function LoadPrefs()
     addHasAttribute(main, modifiedAttr);
     onMainChange(main);
     watchForChange(main, argsChildOnly, onMainChange);
+
 })();
