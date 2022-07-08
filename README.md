@@ -2,7 +2,7 @@
 -Automatically makes Twitter load the highest resolution of video or image.<br/> 
 >***(even if the image isn't expanded to full view, it will be highest quality, including when saving it)***<br/>
 
--Media Download button on the tweet's control bar (won't work on retweets for now, go to original post first).<br/>
+-Media Download button on the tweet's control bar (won't work on quote-retweets for now, go to original post first).<br/>
 
 -Images will layout in full view automatically if possible, or show as much as possible for multi-image layouts.<br/>
 
