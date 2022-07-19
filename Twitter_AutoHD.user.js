@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.53
+// @version      1.54
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -130,7 +130,7 @@ async function addDownloadButton(tweet, vidUrl, tweetInfo)
     let getButtonToDupe = function(btnGrp) {return buttonGrp.lastChild.cloneNode(true); };
     let isIframe = false;
 
-    let buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"]');
+    let buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"][id^="id__"]');
     if(buttonGrp == null) //Try iframe version
     {
         buttonGrp = tweet.querySelector('div a[href*="like?"]')?.parentElement;
