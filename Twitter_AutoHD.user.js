@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.55
+// @version      1.57
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -163,7 +163,7 @@ async function addDownloadButton(tweet, vidUrl, tweetInfo)
 
     const iconDiv = isIframe ? dlBtn.querySelector('div[dir="auto"]') : dlBtn.querySelector('div[dir="ltr"]');
     const bg = isIframe ? svg.parentElement : iconDiv.firstElementChild.firstElementChild;
-    const linkElem = isIframe ? dlBtn : $(dlBtn).wrapAll(`<a href="${vidUrl}" download="${filename}"></a>`);
+    const linkElem = isIframe ? dlBtn : $(dlBtn).wrapAll(`<a href="${vidUrl}" download="${filename}" style="${dlBtn.style.cssText}"></a>`);
 
     const oldBGColor = $(bg).css("background-color");
     const oldIconColor = $(iconDiv).css("color");
