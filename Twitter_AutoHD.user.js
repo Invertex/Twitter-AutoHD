@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.57
+// @version      1.58
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -279,7 +279,7 @@ async function updateImageElements(tweet, imgLinks)
         processBlurButton(tweet);
 
         const padder = await awaitElem(imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement, 'div[style^="padding-bottom"]');
-        padder.parentElement.style = ""; //Get rid of static content size values
+        //padder.parentElement.style = ""; //Get rid of static content size values
 
         const flexer = padder.closest('div[id^="id_"] > div').style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
 
