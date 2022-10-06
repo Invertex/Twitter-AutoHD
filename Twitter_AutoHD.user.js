@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.58
+// @version      1.59
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -190,6 +190,14 @@ async function addDownloadButton(tweet, vidUrl, tweetInfo)
         download(vidUrl, filename); });
 }
 
+
+async function updateEmbedMedia(tweet, embed)
+{
+    let vid = await awaitElem(embed, 'video', argsChildAndSub);
+      let tweetInfo = getTweetInfo(tweet);
+      addCustomCtxMenu(embed, vid.src, tweetInfo, null);
+}
+
 function waitForImgLoad(img)
 {
     return new Promise((resolve, reject) =>
@@ -211,6 +219,7 @@ function updateImgSrc(imgElem, bgElem, src)
 async function updateImageElement(tweetInfo, imgLink, imgCnt)
 {
     const imgContainer = await awaitElem(imgLink, 'div[aria-label="Image"], div[data-testid="tweetPhoto"]', argsChildAndSub);
+
     const img = await awaitElem(imgContainer, 'IMG', argsChildAndSub);
     const hqSrc = getHighQualityImage(img.src);
 
@@ -264,6 +273,7 @@ async function updateImageElement(tweetInfo, imgLink, imgCnt)
     const flexDir = $(imgLink.parentElement).css('flex-direction');
     return { imgElem: img, bgElem: bg, layoutContainer: imgLink.parentElement, width: img.naturalWidth, height: img.naturalHeight, flex: flexDir, hqSrc: hqSrc };
 }
+
 
 async function updateImageElements(tweet, imgLinks)
 {
@@ -488,22 +498,27 @@ function mediaExists(tweet, tweetObserver)
 
     if (tweet == null /*|| (!isOStatusPage() && tweet.querySelector('div[data-testid="placementTracking"]') == null)*/ ) { return false; } //If video, should have placementTracking after first mutation
     if (tweet.querySelector(`[${modifiedAttr}]`)) { return true; }
-    let video = tweet.querySelector('video');
+
+    let foundContent = false;
+    let video = tweet.querySelector('VIDEO');
 
     if (video != null) //is video
     {
+        addHasAttribute(tweet, modifiedAttr);
         processBlurButton(tweet);
 
         if (replaceVideoElement(tweet, video))
         {
             tweetObserver?.disconnect();
             addHasAttribute(video, modifiedAttr);
-            return true;
+            foundContent = true;
         }
-        return false;
+
+        return foundContent;
     }
 
     const allLinks = Array.from(tweet.querySelectorAll('a'));
+    const tweetPhotos = Array.from(tweet.querySelectorAll('div[data-testid="tweetPhoto"]'));
     const imgLinks = [];
     const quoteImgLinks = [];
 
@@ -522,22 +537,28 @@ function mediaExists(tweet, tweetObserver)
            }*/
     });
 
-    let foundImages = false;
+    tweetPhotos.forEach((tweetPhoto) =>
+    {
+        foundContent = true;
+        updateEmbedMedia(tweet, tweetPhoto);
+    });
 
     if (imgLinks.length > 0)
     {
         //  tweetObserver.disconnect();
         updateImageElements(tweet, imgLinks);
-        foundImages = true;
+        foundContent = true;
     }
     if (quoteImgLinks.length > 0)
     {
         //  tweetObserver.disconnect();
         updateImageElements(tweet, quoteImgLinks);
-        foundImages = true;
+        foundContent = true;
     }
-    if (foundImages) { addHasAttribute(tweet, modifiedAttr); }
-    return foundImages;
+
+    if (foundContent) { addHasAttribute(tweet, modifiedAttr); }
+
+    return foundContent;
 }
 
 async function listenForMediaType(tweet)
@@ -872,9 +893,12 @@ const ctxMenuList = document.createElement('ul');
 ctxMenu.appendChild(ctxMenuList);
 
 const ctxMenuOpenInNewTab = createCtxMenuItem(ctxMenuList, "Open Image in New Tab");
+const ctxMenuOpenVidInNewTab = createCtxMenuItem(ctxMenuList, "Open Video in New Tab");
 const ctxMenuSaveAs = createCtxMenuItem(ctxMenuList, "Save Image As");
+const ctxMenuSaveAsVid = createCtxMenuItem(ctxMenuList, "Save Video As");
 const ctxMenuCopyImg = createCtxMenuItem(ctxMenuList, "Copy Image");
-const ctxMenuCopyAddress = createCtxMenuItem(ctxMenuList, "Copy Image Address");
+const ctxMenuCopyAddress = createCtxMenuItem(ctxMenuList, "Copy Image Link");
+const ctxMenuCopyVidAddress = createCtxMenuItem(ctxMenuList, "Copy Video Link");
 const ctxMenuGRIS = createCtxMenuItem(ctxMenuList, "Search Google for Image");
 const ctxMenuShowDefault = createCtxMenuItem(ctxMenuList, "Show Default Context Menu");
 
@@ -937,43 +961,78 @@ function wasShowDefaultContextClicked()
     return selectedShowDefaultContext;
 }
 
-function updateContextMenuLink(dlURL, tweetInfo, img)
+async function updateContextMenuLink(dlURL, tweetInfo, img)
 {
-    img.crossOrigin = 'Anonymous'; //Needed to avoid browser preventing the Canvas from being copied when doing "Copy Image"
-    ctxMenuSaveAs.onclick = () => { setContextMenuVisible(false);
-        download(dlURL, filenameFromTweetInfo(tweetInfo)) };
-    ctxMenuOpenInNewTab.onclick = () =>
+    let isImage = img != null;
+    let imgVisibility = isImage ? "block" : "none";
+    let vidVisibility = isImage ? "none" : "block";
+
+    ctxMenuOpenInNewTab.style.display = imgVisibility;
+    ctxMenuSaveAs.style.display = imgVisibility;
+    ctxMenuCopyImg.style.display = imgVisibility;
+    ctxMenuCopyAddress.style.display = imgVisibility;
+    ctxMenuGRIS.style.display = imgVisibility;
+
+    ctxMenuOpenVidInNewTab.style.display = vidVisibility;
+    ctxMenuSaveAsVid.style.display = vidVisibility;
+    ctxMenuCopyVidAddress.style.display = vidVisibility;
+
+    const saveMedia = function(url){ setContextMenuVisible(false); download(url, filenameFromTweetInfo(tweetInfo)) };
+    const copyAddress = function(url){ setContextMenuVisible(false); navigator.clipboard.writeText(url); };
+    const openInNewTab = function(url)
     {
         setContextMenuVisible(false);
         if (GM_OpenInTabMissing)
         {
             var lastWin = window;
-            window.open(dlURL, '_blank');
+            window.open(url, '_blank');
             lastWin.focus();
         }
-        else { GM_openInTab(dlURL, { active: false, insert: true, setParent: true, incognito: false }); }
+        else { GM_openInTab(url, { active: false, insert: true, setParent: true, incognito: false }); }
     };
-    ctxMenuCopyImg.onclick = () =>
+
+
+    //Image Context
+    if(img != null)
     {
-        setContextMenuVisible(false);
-        try
+        img.crossOrigin = 'Anonymous'; //Needed to avoid browser preventing the Canvas from being copied when doing "Copy Image"
+
+        ctxMenuOpenInNewTab.onclick = () => { openInNewTab(dlURL) };
+        ctxMenuSaveAs.onclick = () => { saveMedia(dlURL) };
+
+        ctxMenuCopyImg.onclick = () =>
         {
-            let c = document.createElement('canvas');
-            c.width = img.naturalWidth;
-            c.height = img.naturalHeight;
-            c.getContext('2d').drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
-            c.toBlob((png) =>
+            setContextMenuVisible(false);
+            try
             {
-                navigator.clipboard.write([new ClipboardItem({
-                    [png.type]: png })]);
-            }, "image/png", 1);
+                let c = document.createElement('canvas');
+                c.width = img.naturalWidth;
+                c.height = img.naturalHeight;
+                c.getContext('2d').drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
+                c.toBlob((png) =>
+                         {
+                    navigator.clipboard.write([new ClipboardItem({
+                        [png.type]: png })]);
+                }, "image/png", 1);
+            }
+            catch (err) { console.log(err); };
+        };
+        ctxMenuCopyAddress.onclick = () => { copyAddress(dlURL) };
+        ctxMenuGRIS.onclick = () => { setContextMenuVisible(false);
+                                     window.open("https://images.google.com/searchbyimage?image_url=" + dlURL); };
+    }
+    else //Video
+    {
+        const vidUrl = await getVidURL(tweetInfo.id);
+        if(vidUrl != null)
+        {
+            ctxMenuOpenVidInNewTab.onclick = () => { openInNewTab(vidUrl) };
+            ctxMenuSaveAsVid.onclick = () => { saveMedia(vidUrl) };
+            ctxMenuCopyVidAddress.onclick = () => { copyAddress(vidUrl) };
         }
-        catch (err) { console.log(err); };
-    };
-    ctxMenuCopyAddress.onclick = () => { setContextMenuVisible(false);
-        navigator.clipboard.writeText(dlURL); };
-    ctxMenuGRIS.onclick = () => { setContextMenuVisible(false);
-        window.open("https://images.google.com/searchbyimage?image_url=" + dlURL); };
+    }
+
+    //Generic Stuff
     ctxMenuShowDefault.onclick = () => { selectedShowDefaultContext = true;
         setContextMenuVisible(false); };
 }
@@ -983,8 +1042,10 @@ function addCustomCtxMenu(elem, dlLink, tweetInfo, img)
     if (addHasAttribute(elem, "thd_customctx")) { return; }
     elem.addEventListener('contextmenu', function (e)
     {
+        e.stopPropagation();
         if (wasShowDefaultContextClicked()) { selectedShowDefaultContext = false; } //Skip everything here and show default context menu
-        else if (ctxMenu.style.display == "block") { e.preventDefault();
+        else if (ctxMenu.style.display == "block") {
+            e.preventDefault();
             setContextMenuVisible(false); }
         else
         {
