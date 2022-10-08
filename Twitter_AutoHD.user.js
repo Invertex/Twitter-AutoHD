@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.59
+// @version      1.60
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -194,8 +194,17 @@ async function addDownloadButton(tweet, vidUrl, tweetInfo)
 async function updateEmbedMedia(tweet, embed)
 {
     let vid = await awaitElem(embed, 'video', argsChildAndSub);
-      let tweetInfo = getTweetInfo(tweet);
-      addCustomCtxMenu(embed, vid.src, tweetInfo, null);
+    let tweetInfo = getTweetInfo(tweet);
+
+    let poster = vid.getAttribute('poster');
+    if(poster != null)
+    { //Most likely a blob video so we'll need the poster attribute ID to query the source video
+        poster = poster.split('thumb/')[1].split('/')[0];
+    }
+
+    getVidURL(tweetInfo.id, vid, poster).then((src) => {
+        addCustomCtxMenu(embed, src, tweetInfo, vid);
+     });
 }
 
 function waitForImgLoad(img)
@@ -225,7 +234,6 @@ async function updateImageElement(tweetInfo, imgLink, imgCnt)
 
     const bg = imgContainer.querySelector('div[style^="background-image"]');
     // LogMessage(imgLink);
-
     addCustomCtxMenu(imgLink, hqSrc, tweetInfo, img);
     img.setAttribute(modifiedAttr, "");
 
@@ -288,11 +296,6 @@ async function updateImageElements(tweet, imgLinks)
 
         processBlurButton(tweet);
 
-        const padder = await awaitElem(imgLinks[0].parentElement.parentElement.parentElement.parentElement.parentElement, 'div[style^="padding-bottom"]');
-        //padder.parentElement.style = ""; //Get rid of static content size values
-
-        const flexer = padder.closest('div[id^="id_"] > div').style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
-
         const images = [];
 
         for (let link = 0; link < imgCnt; link++)
@@ -302,6 +305,7 @@ async function updateImageElements(tweet, imgLinks)
                 tweetInfo = { ...tweetInfo }; //Shallow copy to avoid changing the data for another image
                 tweetInfo.elemIndex = link + 1; //Set our element index so we can add it to our filename later to differentiate the multi-images of a post ID
             }
+
             let imgData = await updateImageElement(tweetInfo, imgLinks[link], imgCnt);
             images.push(imgData);
         }
@@ -370,8 +374,16 @@ async function updateImageElements(tweet, imgLinks)
             }
         }
 
-        padder.style = `padding-bottom: ${ratio}%; padding-top: 0px;`;
+        const padder = tweet.querySelector('div[id^="id_"] div[style^="padding-bottom"]');
+        const flexer = padder.closest('div[id^="id_"] > div');
+        const bg = flexer.querySelector('div[style^="background"] > div');
+
+        padder.parentElement.style = "";
+        padder.style = `padding-bottom: ${ratio}%;`;
         padder.setAttribute("modifiedPadding", "");
+
+        flexer.style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
+        bg.style.width = "100%";
 
         for (let i = 0; i < imgCnt; i++)
         {
@@ -386,7 +398,8 @@ async function updateImageElements(tweet, imgLinks)
         {
             edgeCase.style.setProperty('align-self', "inherit");
         }
-        doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + ratio + "%;"; })
+
+        doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + (ratio ) + "%;"; })
         doOnAttributeChange(padder.parentElement, (padderParentElem) => { padderParentElem.style = ""; })
     }
 }
@@ -437,12 +450,19 @@ async function watchPlayButton(vidElem)
     }
 }
 
+function getLocalVidID(url)
+{
+    let split = url.split('/');
+    let id = split[split.length - 1].split('.')[0];
+    return id;
+}
+
 async function replaceVideoElement(tweet, vidElem)
 {
-    if (tweet == null) { return false; }
+    if (tweet == null) { return true; }
 
     const tweetInfo = getTweetInfo(tweet);
-    if (tweetInfo == null) { return false; }
+    if (tweetInfo == null) { return true; }
 
     watchPlayButton(vidElem);
 
@@ -464,11 +484,12 @@ async function replaceVideoElement(tweet, vidElem)
 
     try
     {
-        const vidUrl = await getVidURL(tweetInfo.id);
+        const vidUrl = await getVidURL(tweetInfo.id, vidElem, null);
         if (vidUrl != null) //Was able to grab URL using legacy Twitter API and user token
         {
             //    LogMessage(`found vid! : ${vidUrl} id: ${tweetInfo.id} url: ${tweetInfo.url} username: ${tweetInfo.username}`);
             addDownloadButton(tweet, vidUrl, tweetInfo);
+             vids.set(tweetInfo.id, vidUrl);
             return true;
         }
     }
@@ -489,43 +510,52 @@ async function replaceVideoElement(tweet, vidElem)
         onload: function (response) { onLoadVideo((new DOMParser()).parseFromString(response.response, "text/html"), tweet, tweetInfo); }
     });
 
-    vids.set(tweetInfo.id, '');
+  //  vids.set(tweetInfo.id, '');
     return true;
 }
 
-function mediaExists(tweet, tweetObserver)
+async function processTweet(tweet, tweetObserver)
 {
 
     if (tweet == null /*|| (!isOStatusPage() && tweet.querySelector('div[data-testid="placementTracking"]') == null)*/ ) { return false; } //If video, should have placementTracking after first mutation
     if (tweet.querySelector(`[${modifiedAttr}]`)) { return true; }
 
     let foundContent = false;
-    let video = tweet.querySelector('VIDEO');
 
-    if (video != null) //is video
+    let waitForLoad = await awaitElem(tweet, 'div[data-testid="tweetPhoto"]');
+    const tweetPhotos = tweet.querySelectorAll('div[data-testid="tweetPhoto"]');
+    const subElems = tweetPhotos.length;
+
+    if(subElems == 0) { return; }
+
+    if(subElems == 1)
     {
-        addHasAttribute(tweet, modifiedAttr);
-        processBlurButton(tweet);
-
-        if (replaceVideoElement(tweet, video))
+         let video = waitForLoad.querySelector('VIDEO');
+        if(video != null)
         {
-            tweetObserver?.disconnect();
-            addHasAttribute(video, modifiedAttr);
-            foundContent = true;
-        }
+            addHasAttribute(tweet, modifiedAttr);
+            processBlurButton(tweet);
 
-        return foundContent;
+            if (replaceVideoElement(tweet, video))
+            {
+                tweetObserver?.disconnect();
+                addHasAttribute(video, modifiedAttr);
+                foundContent = true;
+            }
+
+            return foundContent;
+        }
     }
 
     const allLinks = Array.from(tweet.querySelectorAll('a'));
-    const tweetPhotos = Array.from(tweet.querySelectorAll('div[data-testid="tweetPhoto"]'));
+
     const imgLinks = [];
     const quoteImgLinks = [];
 
     allLinks.forEach((imgLink) =>
     {
         let href = imgLink.href;
-        if (href.includes('/photo/') /*&& imgLink.closest('div[tabindex][role="link"]') == null && imgLink.querySelector('div[data-testid="tweetPhoto"]') != null*/ )
+        if (href.includes('/photo/') || href.includes('/media/') /*&& imgLink.closest('div[tabindex][role="link"]') == null && imgLink.querySelector('div[data-testid="tweetPhoto"]') != null*/ )
         {
             if (imgLink.closest('div[tabindex][role="link"]') != null) { quoteImgLinks.push(imgLink); }
             else { imgLinks.push(imgLink); }
@@ -537,12 +567,11 @@ function mediaExists(tweet, tweetObserver)
            }*/
     });
 
-    tweetPhotos.forEach((tweetPhoto) =>
+    for(let embedIndex = 0; embedIndex < tweetPhotos.length; embedIndex++)
     {
         foundContent = true;
-        updateEmbedMedia(tweet, tweetPhoto);
-    });
-
+        updateEmbedMedia(tweet, tweetPhotos[embedIndex]);
+    }
     if (imgLinks.length > 0)
     {
         //  tweetObserver.disconnect();
@@ -557,8 +586,6 @@ function mediaExists(tweet, tweetObserver)
     }
 
     if (foundContent) { addHasAttribute(tweet, modifiedAttr); }
-
-    return foundContent;
 }
 
 async function listenForMediaType(tweet)
@@ -566,8 +593,8 @@ async function listenForMediaType(tweet)
     if (addHasAttribute(tweet, "thd_observing")) { return; }
 
     //  if(postRoot.querySelector('div[role="blockquote"]') != null) { LogMessage("bq"); return; } //Can't get the source post from the blockquote HTML, have to use Twitter API eventually
-    const tweetObserver = new MutationObserver((muteList, observer) => { mediaExists(tweet, observer); });
-    mediaExists(tweet, tweetObserver);
+    const tweetObserver = new MutationObserver((muteList, observer) => { processTweet(tweet, observer); });
+    processTweet(tweet, tweetObserver);
     tweetObserver.observe(tweet, { attributes: true, childList: true, subtree: true });
 }
 
@@ -874,7 +901,7 @@ async function onLayersChange(layers, mutation)
 
 async function updateFullViewImage(img, tweetInfo)
 {
-    if (addHasAttribute(img, "thd_modified")) { return; }
+  //  if (addHasAttribute(img, "thd_modified")) { return; }
     let bg = img.parentElement.querySelector('div');
     let hqSrc = getHighQualityImage(img.src);
     addCustomCtxMenu(img, hqSrc, tweetInfo, img);
@@ -885,11 +912,13 @@ async function updateFullViewImage(img, tweetInfo)
 //<--> RIGHT-CLICK CONTEXT MENU STUFF START <-->//
 
 const ctxMenu = document.createElement('div');
+ctxMenu.style.zIndex = "500";
 ctxMenu.id = "contextMenu";
 ctxMenu.className = "context-menu";
 setContextMenuVisible(false);
 
 const ctxMenuList = document.createElement('ul');
+//ctxMenuList.style.zIndex = 500;
 ctxMenu.appendChild(ctxMenuList);
 
 const ctxMenuOpenInNewTab = createCtxMenuItem(ctxMenuList, "Open Image in New Tab");
@@ -961,9 +990,12 @@ function wasShowDefaultContextClicked()
     return selectedShowDefaultContext;
 }
 
-async function updateContextMenuLink(dlURL, tweetInfo, img)
+async function updateContextMenuLink(dlURL, tweetInfo, media)
 {
-    let isImage = img != null;
+    if(media == null) { return; }
+
+    let isImage = media.tagName.toLowerCase() == "img";
+
     let imgVisibility = isImage ? "block" : "none";
     let vidVisibility = isImage ? "none" : "block";
 
@@ -993,9 +1025,9 @@ async function updateContextMenuLink(dlURL, tweetInfo, img)
 
 
     //Image Context
-    if(img != null)
+    if(isImage == true)
     {
-        img.crossOrigin = 'Anonymous'; //Needed to avoid browser preventing the Canvas from being copied when doing "Copy Image"
+        media.crossOrigin = 'Anonymous'; //Needed to avoid browser preventing the Canvas from being copied when doing "Copy Image"
 
         ctxMenuOpenInNewTab.onclick = () => { openInNewTab(dlURL) };
         ctxMenuSaveAs.onclick = () => { saveMedia(dlURL) };
@@ -1006,9 +1038,9 @@ async function updateContextMenuLink(dlURL, tweetInfo, img)
             try
             {
                 let c = document.createElement('canvas');
-                c.width = img.naturalWidth;
-                c.height = img.naturalHeight;
-                c.getContext('2d').drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
+                c.width = media.naturalWidth;
+                c.height = media.naturalHeight;
+                c.getContext('2d').drawImage(media, 0, 0, media.naturalWidth, media.naturalHeight);
                 c.toBlob((png) =>
                          {
                     navigator.clipboard.write([new ClipboardItem({
@@ -1023,13 +1055,9 @@ async function updateContextMenuLink(dlURL, tweetInfo, img)
     }
     else //Video
     {
-        const vidUrl = await getVidURL(tweetInfo.id);
-        if(vidUrl != null)
-        {
-            ctxMenuOpenVidInNewTab.onclick = () => { openInNewTab(vidUrl) };
-            ctxMenuSaveAsVid.onclick = () => { saveMedia(vidUrl) };
-            ctxMenuCopyVidAddress.onclick = () => { copyAddress(vidUrl) };
-        }
+        ctxMenuOpenVidInNewTab.onclick = () => { openInNewTab(dlURL) };
+        ctxMenuSaveAsVid.onclick = () => { saveMedia(dlURL) };
+        ctxMenuCopyVidAddress.onclick = () => { copyAddress(dlURL) };
     }
 
     //Generic Stuff
@@ -1037,7 +1065,7 @@ async function updateContextMenuLink(dlURL, tweetInfo, img)
         setContextMenuVisible(false); };
 }
 
-function addCustomCtxMenu(elem, dlLink, tweetInfo, img)
+function addCustomCtxMenu(elem, dlLink, tweetInfo, media)
 {
     if (addHasAttribute(elem, "thd_customctx")) { return; }
     elem.addEventListener('contextmenu', function (e)
@@ -1049,7 +1077,7 @@ function addCustomCtxMenu(elem, dlLink, tweetInfo, img)
             setContextMenuVisible(false); }
         else
         {
-            updateContextMenuLink(dlLink, tweetInfo, img);
+            updateContextMenuLink(dlLink, tweetInfo, media);
             setContextMenuVisible(true);
             ctxMenu.style.left = mouseX(e) + "px";
             ctxMenu.style.top = mouseY(e) + "px";
@@ -1153,7 +1181,7 @@ function getTweetInfo(tweet)
     if (photoUrl.length > 1) { elementIndex = parseInt(photoUrl[1]);
         LogMessage(url + " : " + photoUrl[1]); }
 
-    return { id: id, url: url, username: username, elemIndex: elementIndex }
+    return { id: id, url: url, username: username, elemIndex: elementIndex, elem: tweet }
 }
 
 function filenameFromTweetInfo(tweetInfo)
@@ -1168,10 +1196,30 @@ function getHighQualityImage(url)
     return url.replace(/(?<=[\&\?]name=)([A-Za-z0-9])+(?=\&)?/, 'orig');
 }
 
-function getVidURL(id)
+function tryGetVidLocal(vidElem)
+{
+    if(vidElem != null && vidElem.tagName.toLowerCase() != "video")
+    {
+        vidElem = vidElem.querySelector('video');
+    }
+    if(vidElem != null)
+    {
+        let src = vidElem.src;
+        if(src.includes('/tweet_video/'))
+        {
+            return src;
+        }
+    }
+    return null;
+}
+
+function getVidURL(id, vidElem, matchId)
 {
     return new Promise((resolve, reject) =>
     {
+        let vidSrc = tryGetVidLocal(vidElem);
+        if(vidSrc !== null) { resolve(vidSrc); return; }
+
         var init = {
             origin: 'https://mobile.twitter.com',
             headers:
@@ -1195,9 +1243,24 @@ function getVidURL(id)
                     {
                         let entities = json.extended_entities;
                         if (entities == undefined || entities == null) { resolve(null); }
-                        let mp4Variants = entities.media[0].video_info.variants.filter(variant => variant.content_type === 'video/mp4');
+
+                        let mediaIndex = 0;
+
+                        if(matchId != null && matchId != "")
+                        {
+                             for(let i = 0; i < entities.media.length; i++)
+                             {
+                                 if(entities.media[i].id_str == matchId)
+                                 {
+                                     mediaIndex = i;
+                                     break;
+                                 }
+                             }
+                        }
+
+                        let mp4Variants = entities.media[mediaIndex].video_info.variants.filter(variant => variant.content_type === 'video/mp4');
                         mp4Variants = mp4Variants.sort((a, b) => (b.bitrate - a.bitrate));
-                        resolve((mp4Variants.length) ? mp4Variants[0].url : null);
+                        resolve((mp4Variants.length) ? mp4Variants[mediaIndex].url : null);
                         return;
                     });
                 }
