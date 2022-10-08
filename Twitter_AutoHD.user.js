@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.61
+// @version      1.63
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -522,7 +522,7 @@ async function processTweet(tweet, tweetObserver)
 
     let foundContent = false;
 
-   // let waitForLoad = await awaitElem(tweet, 'div[data-testid="tweetPhoto"]');
+   // let waitForLoad = await awaitElem(tweet, 'div[data-testid="tweetPhoto"]', argsChildAndSub);
     const tweetPhotos = tweet.querySelectorAll('div[data-testid="tweetPhoto"]');
     const subElems = tweetPhotos.length;
 
@@ -1191,16 +1191,21 @@ async function getTweetInfo(tweet)
     let urlSplit = url.split('/status/');
     let id = urlSplit[1].split('/')[0];
 
-    if(tweet.getAttribute('tabindex') == "-1")
+    let subTweet = tweet.querySelector('div[data-testid="tweetPhoto"] div[tabindex]');
+
+    if(subTweet != null && subTweet.getAttribute('tabindex') == "-1")
     {
         console.log("quote tweet");
         let subLink = await getLinkFromPoster(id);
-
-        url = subLink.split('?')[0];
-        photoUrl = url.split('/photo/');
-        url = photoUrl[0];
-        urlSplit = url.split('/status/');
-        id = urlSplit[1].split('/')[0];
+        if(subLink != null)
+        {
+            console.log(subLink);
+            url = subLink.split('?')[0];
+            photoUrl = url.split('/photo/');
+            url = photoUrl[0];
+            urlSplit = url.split('/status/');
+            id = urlSplit[1].split('/')[0];
+        }
     }
 
     let username = urlSplit[0].split('/').pop();
