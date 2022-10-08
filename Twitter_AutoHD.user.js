@@ -194,12 +194,12 @@ async function addDownloadButton(tweet, vidUrl, tweetInfo)
 async function updateEmbedMedia(tweet, embed)
 {
     let vid = await awaitElem(embed, 'video', argsChildAndSub);
-    let tweetInfo = getTweetInfo(tweet);
+    let tweetInfo = await getTweetInfo(tweet);
 
     let poster = vid.getAttribute('poster');
     if(poster != null)
     { //Most likely a blob video so we'll need the poster attribute ID to query the source video
-        poster = poster.split('thumb/')[1].split('/')[0];
+        poster = getIDFromPoster(poster);
     }
 
     getVidURL(tweetInfo.id, vid, poster).then((src) => {
@@ -292,7 +292,7 @@ async function updateImageElements(tweet, imgLinks)
 
         if (addHasAttribute(imgLinks[0], modifiedAttr)) { return; }
 
-        let tweetInfo = getTweetInfo(tweet);
+        let tweetInfo = await getTweetInfo(tweet);
 
         processBlurButton(tweet);
 
@@ -461,7 +461,7 @@ async function replaceVideoElement(tweet, vidElem)
 {
     if (tweet == null) { return true; }
 
-    const tweetInfo = getTweetInfo(tweet);
+    const tweetInfo = await getTweetInfo(tweet);
     if (tweetInfo == null) { return true; }
 
     watchPlayButton(vidElem);
@@ -518,11 +518,11 @@ async function processTweet(tweet, tweetObserver)
 {
 
     if (tweet == null /*|| (!isOStatusPage() && tweet.querySelector('div[data-testid="placementTracking"]') == null)*/ ) { return false; } //If video, should have placementTracking after first mutation
-    if (tweet.querySelector(`[${modifiedAttr}]`)) { return true; }
+    if (tweet.querySelector(`[${modifiedAttr}]`) ) { return true; }
 
     let foundContent = false;
 
-    let waitForLoad = await awaitElem(tweet, 'div[data-testid="tweetPhoto"]');
+   // let waitForLoad = await awaitElem(tweet, 'div[data-testid="tweetPhoto"]');
     const tweetPhotos = tweet.querySelectorAll('div[data-testid="tweetPhoto"]');
     const subElems = tweetPhotos.length;
 
@@ -530,7 +530,7 @@ async function processTweet(tweet, tweetObserver)
 
     if(subElems == 1)
     {
-         let video = waitForLoad.querySelector('VIDEO');
+         let video = tweetPhotos[0].querySelector('VIDEO');
         if(video != null)
         {
             addHasAttribute(tweet, modifiedAttr);
@@ -701,9 +701,9 @@ async function watchForTimeline(primaryColumn, section)
         if (progBar)
         {
             // Wait for an Article to show up before proceeding
-            LogMessage("Has Prog Bar, Awaiting Article");
+         //   LogMessage("Has Prog Bar, Awaiting Article");
             let art = await awaitElem(section, "article", { childList: true, subtree: true, attributes: true });
-            LogMessage("Found Article");
+          //  LogMessage("Found Article");
         }
 
         let tlContainer = tl.parentElement;
@@ -876,7 +876,7 @@ async function onLayersChange(layers, mutation)
         const dialog = await awaitElem(contentContainer, 'div[role="dialog"]', argsChildAndSub);
         const img = await awaitElem(dialog, 'img[alt="Image"]', argsChildAndSub);
         const list = dialog.querySelector('ul[role="list"]');
-        let tweetInfo = getTweetInfo(img);
+        let tweetInfo = await getTweetInfo(img);
 
         if (list != null /* && !addHasAttribute(list, 'thd_modified')*/ )
         {
@@ -1138,10 +1138,16 @@ function download(url, filename)
     });
 }
 
+function getIDFromPoster(poster)
+{
+    return poster.split('thumb/')[1].split('/')[0];
+}
+
 function getUrlFromTweet(tweet)
 {
     let curUrl = window.location.href;
-    if (curUrl.includes('/photo/')) { return curUrl; } //Probably viewing full-screen image
+    if (curUrl.includes('/photo/') || curUrl.includes('/status/')) { return curUrl; } //Probably viewing full-screen image
+
 
     let article = tweet.tagName.toUpperCase() == 'ARTICLE' ? tweet : tweet.closest('article');
 
@@ -1163,7 +1169,7 @@ function getUrlFromTweet(tweet)
     return null;
 }
 
-function getTweetInfo(tweet)
+async function getTweetInfo(tweet)
 {
     let link = getUrlFromTweet(tweet);
     if (link == null) { return null; }
@@ -1172,8 +1178,20 @@ function getTweetInfo(tweet)
     let url = link.split('?')[0];
     let photoUrl = url.split('/photo/');
     url = photoUrl[0];
-    const urlSplit = url.split('/status/');
-    const id = urlSplit[1].split('/')[0];
+    let urlSplit = url.split('/status/');
+    let id = urlSplit[1].split('/')[0];
+
+    if(tweet.getAttribute('tabindex') == "-1")
+    {
+        console.log("quote tweet");
+        let subLink = await getLinkFromPoster(id);
+
+        url = subLink.split('?')[0];
+        photoUrl = url.split('/photo/');
+        url = photoUrl[0];
+        urlSplit = url.split('/status/');
+        id = urlSplit[1].split('/')[0];
+    }
 
     let username = urlSplit[0].split('/').pop();
     let attributeTo = tweet.querySelector('div[aria-label]');
@@ -1213,14 +1231,11 @@ function tryGetVidLocal(vidElem)
     return null;
 }
 
-function getVidURL(id, vidElem, matchId)
-{
-    return new Promise((resolve, reject) =>
-    {
-        let vidSrc = tryGetVidLocal(vidElem);
-        if(vidSrc !== null) { resolve(vidSrc); return; }
+const fetchURL = "https://api.twitter.com/1.1/statuses/show.json?include_profile_interstitial_type=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&skip_status=1&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&tweet_mode=extended&trim_user=false&include_ext_media_color=true&id=";
 
-        var init = {
+function initFetch()
+{
+    let init = {
             origin: 'https://mobile.twitter.com',
             headers:
             {
@@ -1232,7 +1247,50 @@ function getVidURL(id, vidElem, matchId)
             credentials: 'include',
             referrer: 'https://mobile.twitter.com'
         };
-        const fetchURL = "https://api.twitter.com/1.1/statuses/show.json?include_profile_interstitial_type=1&include_blocking=1&include_blocked_by=1&include_followed_by=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&skip_status=1&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&include_reply_count=1&tweet_mode=extended&trim_user=false&include_ext_media_color=true&id=";
+
+    return init;
+}
+
+function getLinkFromPoster(tweetId)
+{
+    return new Promise((resolve, reject) =>
+   {
+        var init = initFetch();
+
+        try
+        {
+            fetch(fetchURL + tweetId, init).then(function (response)
+            {
+                if (response.status == 200)
+                {
+                    response.json().then(function(json)
+                    {
+                        if(json.is_quote_status == true)
+                        {
+                            resolve(json.entities.urls[0].expanded_url);
+                            return;
+                        }
+                        resolve(null);
+                        return;
+                    });
+                }
+                else { resolve(null); }
+            }).catch((err) => { reject({ error: err });
+                               resolve(null); });
+        }
+        catch (err) { resolve(null); }
+    });
+}
+
+function getVidURL(id, vidElem, matchId)
+{
+    return new Promise((resolve, reject) =>
+    {
+        let vidSrc = tryGetVidLocal(vidElem);
+        if(vidSrc !== null) { resolve(vidSrc); return; }
+
+        let init = initFetch();
+
         try
         {
             fetch(fetchURL + id, init).then(function (response)
