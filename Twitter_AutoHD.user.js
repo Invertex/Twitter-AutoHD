@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.60
+// @version      1.61
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -994,6 +994,8 @@ async function updateContextMenuLink(dlURL, tweetInfo, media)
 {
     if(media == null) { return; }
 
+    ctxMenu.setAttribute('selection', dlURL);
+
     let isImage = media.tagName.toLowerCase() == "img";
 
     let imgVisibility = isImage ? "block" : "none";
@@ -1071,11 +1073,13 @@ function addCustomCtxMenu(elem, dlLink, tweetInfo, media)
     elem.addEventListener('contextmenu', function (e)
     {
         e.stopPropagation();
+
+        let curSel = ctxMenu.getAttribute('selection');
+
         if (wasShowDefaultContextClicked()) { selectedShowDefaultContext = false; } //Skip everything here and show default context menu
-        else if (ctxMenu.style.display == "block") {
-            e.preventDefault();
-            setContextMenuVisible(false); }
-        else
+        if(ctxMenu.style.display != "block" ||
+        (ctxMenu.style.display == "block" && (curSel == null ||
+                                              (curSel != null && curSel != dlLink))))
         {
             updateContextMenuLink(dlLink, tweetInfo, media);
             setContextMenuVisible(true);
@@ -1083,6 +1087,12 @@ function addCustomCtxMenu(elem, dlLink, tweetInfo, media)
             ctxMenu.style.top = mouseY(e) + "px";
             e.preventDefault();
         }
+        else
+        {
+            e.preventDefault();
+            setContextMenuVisible(false);
+        }
+
     }, false);
 }
 
