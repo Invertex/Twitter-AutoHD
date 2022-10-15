@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.63
+// @version      1.64
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -375,23 +375,27 @@ async function updateImageElements(tweet, imgLinks)
         }
 
         const padder = tweet.querySelector('div[id^="id_"] div[style^="padding-bottom"]');
-        const flexer = padder.closest('div[id^="id_"] > div');
-        const bg = flexer.querySelector('div[style^="background"] > div');
+		if(padder != null)
+		{
+			const flexer = padder.closest('div[id^="id_"] > div');
+			const bg = flexer.querySelector('div[style^="background"] > div');
 
-        padder.parentElement.style = "";
-        padder.style = `padding-bottom: ${ratio}%;`;
-        padder.setAttribute("modifiedPadding", "");
-
-        flexer.style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
-        bg.style.width = "100%";
-
+			padder.parentElement.style = "";
+			padder.style = `padding-bottom: ${ratio}%;`;
+			const modPaddingAttr = "modifiedPadding";
+			padder.setAttribute(modPaddingAttr, "");
+			padder.parentElement.setAttribute(modPaddingAttr, "");
+			flexer.style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
+			bg.style.width = "100%";
+		}
+		
         for (let i = 0; i < imgCnt; i++)
         {
             let curImg = images[i];
             updateImgSrc(curImg, curImg.bgElem, curImg.hqSrc);
             doOnAttributeChange(curImg.layoutContainer, () => { updateImgSrc(curImg, curImg.bgElem, curImg.hqSrc) });
         }
-
+		
         //Annoying Edge....edge-case. Have to find this random class name generated element and remove its align so that elements will expand fully into the feed column
         var edgeCase = getCSSRuleContainingStyle('align-self', ['.r-'], 0, 'flex-start');
         if (edgeCase != null)
@@ -399,8 +403,11 @@ async function updateImageElements(tweet, imgLinks)
             edgeCase.style.setProperty('align-self', "inherit");
         }
 
-        doOnAttributeChange(padder, (padderElem) => { padderElem.style = "padding-bottom: " + (ratio ) + "%;"; })
-        doOnAttributeChange(padder.parentElement, (padderParentElem) => { padderParentElem.style = ""; })
+        if(padder != null)
+        {
+            doOnAttributeChange(padder, (padderElem) => { if(padderElem.getAttribute("modifiedPadding") == null) { padderElem.style = "padding-bottom: " + (ratio) + "%;";} })
+            doOnAttributeChange(padder.parentElement, (padderParentElem) => { if(padderParentElem.getAttribute("modifiedPadding") == null) { padderParentElem.style = "";} })
+        }
     }
 }
 
