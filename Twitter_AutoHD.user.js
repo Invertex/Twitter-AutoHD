@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.65
+// @version      1.66
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -386,16 +386,16 @@ async function updateImageElements(tweet, imgLinks)
 			padder.setAttribute(modPaddingAttr, "");
 			padder.parentElement.setAttribute(modPaddingAttr, "");
 			flexer.style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
-			bg.style.width = "100%";
+            if(bg) { bg.style.width = "100%"; }
 		}
-		
+
         for (let i = 0; i < imgCnt; i++)
         {
             let curImg = images[i];
             updateImgSrc(curImg, curImg.bgElem, curImg.hqSrc);
             doOnAttributeChange(curImg.layoutContainer, () => { updateImgSrc(curImg, curImg.bgElem, curImg.hqSrc) });
         }
-		
+
         //Annoying Edge....edge-case. Have to find this random class name generated element and remove its align so that elements will expand fully into the feed column
         var edgeCase = getCSSRuleContainingStyle('align-self', ['.r-'], 0, 'flex-start');
         if (edgeCase != null)
@@ -535,6 +535,8 @@ async function processTweet(tweet, tweetObserver)
 
     if(subElems == 0) { return; }
 
+
+
     if(subElems == 1)
     {
          let video = tweetPhotos[0].querySelector('VIDEO');
@@ -589,10 +591,12 @@ async function processTweet(tweet, tweetObserver)
     {
         //  tweetObserver.disconnect();
         updateImageElements(tweet, quoteImgLinks);
-        foundContent = true;
     }
 
-    if (foundContent) { addHasAttribute(tweet, modifiedAttr); }
+    if (foundContent) {
+        processBlurButton(tweet);
+        addHasAttribute(tweet, modifiedAttr);
+    }
 }
 
 async function listenForMediaType(tweet)
@@ -794,31 +798,54 @@ async function setupNSFWToggle(sidePanel)
     }
 }
 
+var blurShowText = "";
+
 async function processBlurButton(tweet)
 {
-    const blurBtn = await awaitElem(tweet, 'div[role="button"][style^="backdrop-filter: blur"]', argsChildAndSub);
 
-    if (blurBtn != null)
+    const getBlurText = function(blur)
     {
-        if (!nsfwBlur)
+        return blur.querySelector('span > span').innerText;
+    }
+
+    const blurBtn = tweet.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
+    if(blurBtn != null)
+    {
+        if(blurShowText == "")
+        {
+            blurShowText = getBlurText(blurBtn);
+        }
+        if(!nsfwBlur)
         {
             blurBtn.click();
         }
-
         blurBtn.style.display = nsfwBlur ? "block" : "none";
 
-        watchForChange(tweet, { attributes: false, childList: true, subtree: true }, (blurParent, mutes) =>
-        {
-            const curBlur = blurParent.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
-            if (curBlur == null) { return; }
 
-            curBlur.style.display = nsfwBlur ? "block" : "none";
-            if (addHasAttribute(curBlur, modifiedAttr)) { return; }
-            nsfwToggleChanged.addEventListener("nsfwToggleChanged", function ()
+        watchForChange(tweet, {attributes: false, childList: true, subtree: true}, (blurParent, mutes) => {
+
+            const curBlur = blurParent.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
+            if(curBlur == null) { return; }
+
+            if(!nsfwBlur && getBlurText(curBlur) == blurShowText)
             {
                 curBlur?.click();
-                curBlur.style.display = nsfwBlur ? "block" : "none";
-            });
+            }
+
+            curBlur.style.display = nsfwBlur ? "block" : "none";
+            let span = curBlur.querySelector('span > span');
+
+            if(!addHasAttribute(curBlur, modifiedAttr))
+            {
+                watchForChange(curBlur, {attributes:true, characterData: true, childList: true, subtree: true}, (blur, mutes) => {
+                    curBlur.style.display = nsfwBlur ? "block" : "none";
+                });
+                nsfwToggleChanged.addEventListener("nsfwToggleChanged", function() {
+                    curBlur?.click();
+                    curBlur.style.display = nsfwBlur ? "block" : "none";
+                });
+            }
+
         });
     }
 }
@@ -1203,11 +1230,10 @@ async function getTweetInfo(tweet)
 
     if(subTweet != null && subTweet.getAttribute('tabindex') == "-1")
     {
-        console.log("quote tweet");
         let subLink = await getLinkFromPoster(id);
         if(subLink != null)
         {
-            console.log(subLink);
+           // console.log(subLink);
             url = subLink.split('?')[0];
             photoUrl = url.split('/photo/');
             url = photoUrl[0];
@@ -1237,7 +1263,7 @@ function getHighQualityImage(url)
     return url.replace(/(?<=[\&\?]name=)([A-Za-z0-9])+(?=\&)?/, 'orig');
 }
 
-function tryGetVidLocal(vidElem)
+function tryGetVidLocal(vidElem, id, matchID)
 {
     if(vidElem != null && vidElem.tagName.toLowerCase() != "video")
     {
@@ -1251,10 +1277,11 @@ function tryGetVidLocal(vidElem)
             return src;
         }
     }
-    return null;
+
+    return vids.get(id + ((matchID != null) ? matchID : ""));
 }
 
-const fetchURL = "https://api.twitter.com/1.1/statuses/show.json?include_profile_interstitial_type=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&skip_status=1&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&tweet_mode=extended&trim_user=false&include_ext_media_color=true&id=";
+const fetchURL = "https://api.twitter.com/1.1/statuses/show.json?skip_status=1&include_entities&cards_platform=Web-12&tweet_mode=extended&trim_user=true&id=";
 
 function initFetch()
 {
@@ -1309,7 +1336,7 @@ function getVidURL(id, vidElem, matchId)
 {
     return new Promise((resolve, reject) =>
     {
-        let vidSrc = tryGetVidLocal(vidElem);
+        let vidSrc = tryGetVidLocal(vidElem, id, matchId);
         if(vidSrc !== null) { resolve(vidSrc); return; }
 
         let init = initFetch();
@@ -1338,10 +1365,21 @@ function getVidURL(id, vidElem, matchId)
                                  }
                              }
                         }
+                        let vid = entities.media[mediaIndex];
 
-                        let mp4Variants = entities.media[mediaIndex].video_info.variants.filter(variant => variant.content_type === 'video/mp4');
-                        mp4Variants = mp4Variants.sort((a, b) => (b.bitrate - a.bitrate));
-                        resolve((mp4Variants.length) ? mp4Variants[mediaIndex].url : null);
+                        if(vid.video_info != null)
+                        {
+                            let mp4Variants = vid.video_info.variants.filter(variant => variant.content_type === 'video/mp4');
+                            mp4Variants = mp4Variants.sort((a, b) => (b.bitrate - a.bitrate));
+                            if(mp4Variants.length)
+                            {
+                                let url = mp4Variants[0].url;
+                                vids.set(id + (matchId != null ? matchId : ""), url);
+                                resolve(url);
+                                return;
+                            }
+                            resolve(null);
+                        }
                         return;
                     });
                 }
