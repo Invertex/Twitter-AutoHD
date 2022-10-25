@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.66
+// @version      1.68
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -193,10 +193,12 @@ async function addDownloadButton(tweet, vidUrl, tweetInfo)
 
 async function updateEmbedMedia(tweet, embed)
 {
+
     let vid = await awaitElem(embed, 'video', argsChildAndSub);
     let tweetInfo = await getTweetInfo(tweet);
 
     let poster = vid.getAttribute('poster');
+
     if(poster != null)
     { //Most likely a blob video so we'll need the poster attribute ID to query the source video
         poster = getIDFromPoster(poster);
@@ -525,7 +527,7 @@ async function processTweet(tweet, tweetObserver)
 {
 
     if (tweet == null /*|| (!isOStatusPage() && tweet.querySelector('div[data-testid="placementTracking"]') == null)*/ ) { return false; } //If video, should have placementTracking after first mutation
-    if (tweet.querySelector(`[${modifiedAttr}]`) ) { return true; }
+    if (tweet.getAttribute(modifiedAttr) != null || tweet.querySelector(`[${modifiedAttr}]`) ) { return true; }
 
     let foundContent = false;
 
@@ -579,6 +581,7 @@ async function processTweet(tweet, tweetObserver)
     for(let embedIndex = 0; embedIndex < tweetPhotos.length; embedIndex++)
     {
         foundContent = true;
+           addHasAttribute(tweet, modifiedAttr);
         updateEmbedMedia(tweet, tweetPhotos[embedIndex]);
     }
     if (imgLinks.length > 0)
@@ -1337,7 +1340,7 @@ function getVidURL(id, vidElem, matchId)
     return new Promise((resolve, reject) =>
     {
         let vidSrc = tryGetVidLocal(vidElem, id, matchId);
-        if(vidSrc !== null) { resolve(vidSrc); return; }
+        if(vidSrc != null) { resolve(vidSrc); return; }
 
         let init = initFetch();
 
