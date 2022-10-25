@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.64
+// @version      1.65
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -796,7 +796,7 @@ async function setupNSFWToggle(sidePanel)
 
 async function processBlurButton(tweet)
 {
-    const blurBtn = tweet.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
+    const blurBtn = await awaitElem(tweet, 'div[role="button"][style^="backdrop-filter: blur"]', argsChildAndSub);
 
     if (blurBtn != null)
     {
@@ -811,8 +811,9 @@ async function processBlurButton(tweet)
         {
             const curBlur = blurParent.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
             if (curBlur == null) { return; }
-            if (addHasAttribute(curBlur, modifiedAttr)) { return; }
+
             curBlur.style.display = nsfwBlur ? "block" : "none";
+            if (addHasAttribute(curBlur, modifiedAttr)) { return; }
             nsfwToggleChanged.addEventListener("nsfwToggleChanged", function ()
             {
                 curBlur?.click();
