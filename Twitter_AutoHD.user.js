@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.68
+// @version      1.69
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -49,6 +49,12 @@ addGlobalStyle('.context-menu ul li:hover { background: #202020;}');
 const usePref_MainWidthKey = "thd_primaryWidth";
 const usePref_hideTrendingKey = "thd_hideTrending";
 const usePref_blurNSFW = "thd_blurNSFW";
+
+const usePref_toggleLiked = "thd_toggleLiked";
+const usePref_toggleRetweet = "thd_toggleRetweet";
+const usePref_toggleFollowed = "thd_toggleFollowed";
+const usePref_toggleTopics = "thd_toggleTopics";
+
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
@@ -126,12 +132,87 @@ const BuildM3U = function (lines)
                 }
             });
         }
+        else if(url.includes('/HomeTimeline'))
+        {
+         //   url = url.replace('includePromotedContent%22%3Atrue%2C%22','');
+         //   url = url.replace('Community%22%3Atrue%2C%22withSuperFollowsUserFields%22%3Atrue', 'Community%22%3Afalse%2C%22withSuperFollowsUserFields%22%3Afalse');
+        //    url = url.replace('withSuperFollowsTweetFields%22%3Atrue', 'withSuperFollowsTweetFields%22%3Afalse');
+         //   url = url.replace('latestControlAvailable%22%3Atrue', 'latestControlAvailable%22%3Afalse');
+         //   url = url.replace('vibe_api_enabled%22%3Atrue', 'vibe_api_enabled%22%3Afalse');
+        //    url = url.replace('withDownvotePerspective%22%3Afalse', 'withDownvotePerspective%22%3Atrue');
+
+           url = url.replace('count%22%3A20', 'count%22%3A50');
+
+            this.addEventListener('readystatechange', function (e)
+            {
+                if (this.readyState === 4)
+                {
+
+                    let json = JSON.parse(e.target.response);
+
+                    if(json.data && json.data.home)
+                    {
+                        json.data.home.home_timeline_urt.instructions[0].entries = processTweetsQuery(json.data.home.home_timeline_urt.instructions[0].entries);
+
+                        Object.defineProperty(this, 'responseText', { writable: true });
+
+                        this.responseText = JSON.stringify(json);
+                    }
+                }
+            })
+        }
+
         open.apply(this, arguments);
     };
 })(XMLHttpRequest.prototype.open);
 
+var firstRun = true;
+
+function processTweetsQuery(entries)
+{
+    for(let i = entries.length - 1; i >= 0; i--)
+    {
+
+        let entry = entries[i];
+
+        if(entry.content == null || entry.content.itemContent == null || entry.content.itemContent.tweet_results == null) { continue; }
+        if(firstRun && entries.length <= 4) //Avoid the timeline freezing from not enough initial entries
+        {
+            continue;
+        }
+
+        if(entry.content.itemContent && entry.content.itemContent.promotedMetadata && entry.content.itemContent.promotedMetadata.advertiser_results)
+        {
+            entries.splice(i, 1);
+        }
+        else if(entries[i].content.itemContent && entries[i].content.itemContent.socialContext)
+        {
+
+            let contextType = entry.content.itemContent.socialContext.contextType;
+
+            if((!toggleLiked.enabled && contextType == "Like") || (!toggleFollowed.enabled && contextType == "Follow") || (!toggleTopics.enabled && entry.content.itemContent.socialContext.type == "TimelineTopicContext"))
+            {
+                entries.splice(i, 1);
+            }
+
+        }
+        else if(!toggleRetweet.enabled
+                && entry.content.itemContent.tweet_results.result.legacy != null
+                && entry.content.itemContent.tweet_results.result.legacy.retweeted_status_result != null
+               && entry.content.itemContent.tweet_results.result.legacy.retweeted_status_result.result.core.user_results.result.legacy.following == false) //Only hide the Retweet if it's not the user's own tweet
+        {
+
+             entries.splice(i, 1);
+        }
+    }
+
+    firstRun = false;
+    return entries;
+}
+
 async function addDownloadButton(tweet, vidUrl, tweetInfo)
 {
+    //console.log("add dl button");
     let getButtonToDupe = function (btnGrp) { return buttonGrp.lastChild.cloneNode(true); };
     let isIframe = false;
 
@@ -193,7 +274,6 @@ async function addDownloadButton(tweet, vidUrl, tweetInfo)
 
 async function updateEmbedMedia(tweet, embed)
 {
-
     let vid = await awaitElem(embed, 'video', argsChildAndSub);
     let tweetInfo = await getTweetInfo(tweet);
 
@@ -469,7 +549,6 @@ function getLocalVidID(url)
 async function replaceVideoElement(tweet, vidElem)
 {
     if (tweet == null) { return true; }
-
     const tweetInfo = await getTweetInfo(tweet);
     if (tweetInfo == null) { return true; }
 
@@ -493,6 +572,7 @@ async function replaceVideoElement(tweet, vidElem)
 
     try
     {
+
         const vidUrl = await getVidURL(tweetInfo.id, vidElem, null);
         if (vidUrl != null) //Was able to grab URL using legacy Twitter API and user token
         {
@@ -538,26 +618,9 @@ async function processTweet(tweet, tweetObserver)
     if(subElems == 0) { return; }
 
 
-
-    if(subElems == 1)
-    {
-         let video = tweetPhotos[0].querySelector('VIDEO');
-        if(video != null)
-        {
-            addHasAttribute(tweet, modifiedAttr);
-            processBlurButton(tweet);
-
-            if (replaceVideoElement(tweet, video))
-            {
-                tweetObserver?.disconnect();
-                addHasAttribute(video, modifiedAttr);
-                foundContent = true;
-            }
-
-            return foundContent;
-        }
-    }
-
+let content = await awaitElem(tweetPhotos[0], 'div[aria-label="Image"] img[alt="Image"], video', argsChildAndSub);
+  /*
+*/
     const allLinks = Array.from(tweet.querySelectorAll('a'));
 
     const imgLinks = [];
@@ -580,9 +643,34 @@ async function processTweet(tweet, tweetObserver)
 
     for(let embedIndex = 0; embedIndex < tweetPhotos.length; embedIndex++)
     {
-        foundContent = true;
-           addHasAttribute(tweet, modifiedAttr);
-        updateEmbedMedia(tweet, tweetPhotos[embedIndex]);
+        if(subElems == 1)
+        {
+            let vidContainer = tweetPhotos[0].querySelector('div[data-testid="videoPlayer"]');
+
+            if(vidContainer != null)
+            {
+
+                let video = await awaitElem(vidContainer, 'VIDEO', argsChildAndSub);
+
+                processBlurButton(tweet);
+
+                if (replaceVideoElement(tweet, video))
+                {
+                    tweetObserver?.disconnect();
+                    addHasAttribute(video, modifiedAttr);
+                    foundContent = true;
+                }
+
+                return foundContent;
+            }
+        }
+        else
+        {
+
+            foundContent = true;
+            addHasAttribute(tweet, modifiedAttr);
+            updateEmbedMedia(tweet, tweetPhotos[embedIndex]);
+        }
     }
     if (imgLinks.length > 0)
     {
@@ -602,9 +690,84 @@ async function processTweet(tweet, tweetObserver)
     }
 }
 
+const topicsFilter = 'a[href^="/i/topics/"]';
+const likedFilter = 'a[href^="/i/user/"]';
+const followsFilter = 'a[href="/i/timeline"]';
+
+const setupToggle = function(elem, toggle)
+{
+    elem.style.display = toggle.enabled ? "block" : "none";
+    toggle.listen((e)=>{
+        elem.style.display = e.detail.toggle.enabled ? "block" : "none";
+    });
+}
+
+/*
+function setupFilters(tweet)
+{
+    return true;
+    let socialCtx = tweet.querySelector('span[data-testid="socialContext"]');
+    if(socialCtx != null)
+    {
+        let root = tweet.closest('[data-testid="cellInnerDiv"]');
+
+        let topics = tweet.querySelector(topicsFilter);
+        if(topics != null)
+        {
+            setupToggle(root, toggleTopics);
+            if(!toggleTopics.enabled)
+            {
+                root.removeChild(root.firstElementChild);
+            }
+            return toggleTopics.enabled;
+        }
+
+        let followed = tweet.querySelector(followsFilter);
+        if(followed != null)
+        {
+              if(!toggleFollowed.enabled)
+            {
+                  root.removeChild(root.firstElementChild);
+            }
+            setupToggle(root, toggleFollowed);
+            return toggleFollowed.enabled;
+        }
+
+        let liked = tweet.querySelector(`likedFilter`);
+        if(liked != null)
+        {
+            if(liked.href.includes('/user/') && root.firstElementChild.className.split(' ').length < 4)
+            {
+                //reply
+                return true;
+            }
+            if(!toggleLiked.enabled)
+            {
+                 root.removeChild(root.firstElementChild);
+            }
+            setupToggle(root, toggleLiked);
+
+            return toggleLiked.enabled;
+        }
+ Bugs to iron out
+ //       let retweet = tweet.querySelector('a[href^="/"][dir="auto"][role="link"]');
+ //       if(retweet != null)
+ //       {
+ //           setupToggle(root, toggleRetweet);
+//        }
+
+
+    }
+       return true;
+}
+*/
+
 async function listenForMediaType(tweet)
 {
+   // setupFilters(tweet)
     if (addHasAttribute(tweet, "thd_observing")) { return; }
+
+  //  if(!setupFilters(tweet)) { return; }
 
     //  if(postRoot.querySelector('div[role="blockquote"]') != null) { LogMessage("bq"); return; } //Can't get the source post from the blockquote HTML, have to use Twitter API eventually
     const tweetObserver = new MutationObserver((muteList, observer) => { processTweet(tweet, observer); });
@@ -624,6 +787,7 @@ var headerColumn = null;
 
 function primaryColumnResizer(primaryColumn, mouseEvent, mouseDown, mouseUp)
 {
+    if(mouseDown && mouseEvent.button != 0) { return; }
     let primaryRect = primaryColumn.getBoundingClientRect();
     let localPosX = mouseEvent.clientX - primaryRect.left;
     primaryColumnCursorDistToEdge = Math.abs(primaryRect.width - localPosX);
@@ -759,11 +923,10 @@ async function onMainChange(main, mutations)
     });
     awaitElem(main, 'div[data-testid="sidebarColumn"]', argsChildAndSub).then((sideBar) =>
     {
-
         awaitElem(sideBar, 'section[role="region"] > [role="heading"]', argsChildAndSub).then((sideBarTrending) =>
         {
             setupTrendingControls(sideBarTrending.parentElement);
-            setupNSFWToggle(sideBar);
+            setupToggles(sideBar);
         });
     });
     if (isOnStatusPage())
@@ -775,29 +938,50 @@ async function onMainChange(main, mutations)
 
 //<--> RIGHT SIDEBAR CONTENT <-->//
 
-let nsfwBlur = true;
-var nsfwToggle = null;
-var nsfwToggleChanged = new EventTarget();
+var toggleNSFW = getToggleObj(usePref_blurNSFW);
+var toggleLiked = getToggleObj(usePref_toggleLiked);
+var toggleFollowed = getToggleObj(usePref_toggleFollowed);
+var toggleRetweet = getToggleObj(usePref_toggleRetweet);
+var toggleTopics = getToggleObj(usePref_toggleTopics);
 
-async function setupNSFWToggle(sidePanel)
+function getToggleObj(name)
 {
-    nsfwBlur = await getUserPref(usePref_blurNSFW, false);
-    nsfwToggle = sidePanel.querySelector('#thd_nsfwToggle');
+    return {enabled:true, elem: null, name: name, onChanged: new EventTarget(), listen: function(func) { this.onChanged.addEventListener(this.name, func); }};
+}
 
-    if (nsfwToggle == null)
+async function setupToggles(sidePanel)
+{
+    createToggleOption(sidePanel, toggleNSFW, false, "NSFW Blur ON", "NSFW Blur OFF");
+
+    createToggleOption(sidePanel, toggleLiked, true, "Liked Tweets ON", "Liked Tweets OFF");
+    createToggleOption(sidePanel, toggleFollowed, false, "Followed By Tweets ON", "Followed By Tweets OFF");
+    createToggleOption(sidePanel, toggleRetweet, true, "Retweets ON", "Retweets OFF");
+    createToggleOption(sidePanel, toggleTopics, false, "Topic Tweets ON", "Topic Tweets OFF");
+}
+
+async function createToggleOption(sidePanel, toggleState, defaultValue, toggleOnText, toggleOffText)
+{
+    toggleState.enabled = await getUserPref(toggleState.name, defaultValue);
+    toggleState.elem = sidePanel.querySelector('#' + toggleState.name);
+
+    if (toggleState.elem == null)
     {
-
-        nsfwToggle = createToggleButton(nsfwBlur ? "NSFW Blur ON" : "NSFW Blur OFF", "thd_nsfwToggle");
-        nsfwToggle.marginBottom = "10px";
-        nsfwToggle.addEventListener('click', (e) =>
+        toggleState.elem = createToggleButton(toggleState.enabled ? toggleOnText : toggleOffText, toggleState.name);
+        toggleState.elem.style.marginTop = "0.4em";
+        toggleState.elem.style.marginBottom = "0.1em";
+        toggleState.elem.style.marginRight = "1em";
+        toggleState.elem.style.marginLeft = "1em";
+        toggleState.elem.style.outlineStyle = "solid";
+        toggleState.elem.style.outlineWidth = "0.02em";
+        toggleState.elem.addEventListener('click', (e) =>
         {
-            nsfwBlur = nsfwBlur ? false : true;
-            setUserPref(usePref_blurNSFW, nsfwBlur);
-            nsfwToggleChanged.dispatchEvent(new Event('nsfwToggleChanged'));
-            nsfwToggle.innerHTML = nsfwBlur ? "NSFW Blur ON" : "NSFW Blur OFF";
+            toggleState.enabled = toggleState.enabled ? false : true;
+            setUserPref(toggleState.name, toggleState.enabled);
+            toggleState.onChanged.dispatchEvent(new CustomEvent(toggleState.name, {'detail':{'toggle':toggleState}}));
+            toggleState.elem.innerHTML = toggleState.enabled ? toggleOnText : toggleOffText;
         });
 
-        const footer = sidePanel.querySelector('nav').parentElement.appendChild(nsfwToggle);
+        const footer = sidePanel.querySelector('nav').parentElement.appendChild(toggleState.elem);
     }
 }
 
@@ -818,11 +1002,11 @@ async function processBlurButton(tweet)
         {
             blurShowText = getBlurText(blurBtn);
         }
-        if(!nsfwBlur)
+        if(!toggleNSFW.enabled)
         {
             blurBtn.click();
         }
-        blurBtn.style.display = nsfwBlur ? "block" : "none";
+        blurBtn.style.display = toggleNSFW.enabled ? "block" : "none";
 
 
         watchForChange(tweet, {attributes: false, childList: true, subtree: true}, (blurParent, mutes) => {
@@ -830,22 +1014,22 @@ async function processBlurButton(tweet)
             const curBlur = blurParent.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
             if(curBlur == null) { return; }
 
-            if(!nsfwBlur && getBlurText(curBlur) == blurShowText)
+            if(!toggleNSFW.enabled && getBlurText(curBlur) == blurShowText)
             {
                 curBlur?.click();
             }
 
-            curBlur.style.display = nsfwBlur ? "block" : "none";
+            curBlur.style.display = toggleNSFW.enabled ? "block" : "none";
             let span = curBlur.querySelector('span > span');
 
             if(!addHasAttribute(curBlur, modifiedAttr))
             {
                 watchForChange(curBlur, {attributes:true, characterData: true, childList: true, subtree: true}, (blur, mutes) => {
-                    curBlur.style.display = nsfwBlur ? "block" : "none";
+                    curBlur.style.display = toggleNSFW.enabled ? "block" : "none";
                 });
-                nsfwToggleChanged.addEventListener("nsfwToggleChanged", function() {
+                toggleNSFW.onChanged.addEventListener("nsfwToggleChanged", function(enabled) {
                     curBlur?.click();
-                    curBlur.style.display = nsfwBlur ? "block" : "none";
+                    curBlur.style.display = enabled ? "block" : "none";
                 });
             }
 
@@ -1353,12 +1537,13 @@ function getVidURL(id, vidElem, matchId)
                     response.json().then(function (json)
                     {
                         let entities = json.extended_entities;
-                        if (entities == undefined || entities == null) { resolve(null); }
+                        if (entities == undefined || entities == null || entities.media == null) { resolve(null); return; }
 
                         let mediaIndex = 0;
 
                         if(matchId != null && matchId != "")
                         {
+
                              for(let i = 0; i < entities.media.length; i++)
                              {
                                  if(entities.media[i].id_str == matchId)
@@ -1529,7 +1714,7 @@ function addGlobalStyle(css)
 
 async function LoadPrefs()
 {
-    getUserPref(usePref_blurNSFW, false).then((res) => { nsfwBlur = res; });
+    getUserPref(usePref_blurNSFW, false).then((res) => { toggleNSFW.enabled = res; });
 }
 
 (async function ()
