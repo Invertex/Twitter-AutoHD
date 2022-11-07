@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.69
+// @version      1.71
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -22,6 +22,7 @@
 // @run-at document-start
 // @require https://ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js
 // ==/UserScript==
+
 const cooky = getCookie("ct0"); //Get our current Twitter session token so we can use Twitter API to request higher quality content
 const requestUrl = 'https://www.savetweetvid.com/result?url='; //Backup option if Twitter API fails
 const modifiedAttr = "THD_modified";
@@ -54,6 +55,8 @@ const usePref_toggleLiked = "thd_toggleLiked";
 const usePref_toggleRetweet = "thd_toggleRetweet";
 const usePref_toggleFollowed = "thd_toggleFollowed";
 const usePref_toggleTopics = "thd_toggleTopics";
+const usePref_toggleClearTopics = "thd_toggleClearTopics";
+const usePref_lastTopicsClearTime = "thd_lastTopicsClearTime";
 
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
@@ -927,6 +930,7 @@ async function onMainChange(main, mutations)
         {
             setupTrendingControls(sideBarTrending.parentElement);
             setupToggles(sideBar);
+            clearTopicsAndInterests();
         });
     });
     if (isOnStatusPage())
@@ -943,6 +947,7 @@ var toggleLiked = getToggleObj(usePref_toggleLiked);
 var toggleFollowed = getToggleObj(usePref_toggleFollowed);
 var toggleRetweet = getToggleObj(usePref_toggleRetweet);
 var toggleTopics = getToggleObj(usePref_toggleTopics);
+var toggleClearTopics = getToggleObj(usePref_toggleClearTopics);
 
 function getToggleObj(name)
 {
@@ -957,6 +962,7 @@ async function setupToggles(sidePanel)
     createToggleOption(sidePanel, toggleFollowed, false, "Followed By Tweets ON", "Followed By Tweets OFF");
     createToggleOption(sidePanel, toggleRetweet, true, "Retweets ON", "Retweets OFF");
     createToggleOption(sidePanel, toggleTopics, false, "Topic Tweets ON", "Topic Tweets OFF");
+    createToggleOption(sidePanel, toggleClearTopics, false, "Interests/Topics Prefs AutoClear ON", "Interests/Topics Prefs AutoClear OFF");
 }
 
 async function createToggleOption(sidePanel, toggleState, defaultValue, toggleOnText, toggleOffText)
@@ -1486,6 +1492,175 @@ function initFetch()
         };
 
     return init;
+}
+
+var clearedTopics = false;
+
+async function clearTopicsAndInterests(force = false)
+{
+    if(!force && clearedTopics) { return; }
+    clearedTopics = true;
+
+    let autoClear = await getUserPref(toggleClearTopics.name, false);
+    if(autoClear == false && force == false) { return; }
+
+    let lastClearTimeText = await getUserPref(usePref_lastTopicsClearTime, "16");
+    let lastClearTime = parseInt(lastClearTimeText);
+    let curTime = Date.now();
+
+    if(curTime - lastClearTime < 86400000 || curTime == lastClearTime)
+    {
+        return;
+    }
+
+    await setUserPref(usePref_lastTopicsClearTime, curTime.toString());
+
+
+    fetch("https://twitter.com/i/api/1.1/account/personalization/twitter_interests.json", {
+        "headers": {
+            "accept": "*/*",
+            "accept-language": "en-US,en;q=0.9",
+            "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-origin",
+            "x-csrf-token": cooky,
+            "x-twitter-active-user": "yes",
+            "x-twitter-auth-type": "OAuth2Session",
+            "x-twitter-client-language": "en"
+        },
+        "referrer": "https://twitter.com/settings/your_twitter_data/twitter_interests",
+        "referrerPolicy": "strict-origin-when-cross-origin",
+        "body": null,
+        "method": "GET",
+        "mode": "cors",
+        "credentials": "include"
+    }).then(function(response) {
+        if(response.status == 200)
+        {
+            response.json().then((json) => {
+
+                fetch("https://twitter.com/i/api/1.1/account/personalization/p13n_preferences.json",
+                      {
+                    "headers": {
+                        "accept": "*/*",
+                        "accept-language": "en-US,en;q=0.9",
+                        "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+                        "sec-fetch-dest": "empty",
+                        "sec-fetch-mode": "cors",
+                        "sec-fetch-site": "same-origin",
+                        "x-csrf-token": cooky,
+                        "x-twitter-active-user": "yes",
+                        "x-twitter-auth-type": "OAuth2Session",
+                        "x-twitter-client-language": "en"
+                    },
+                    "referrer": "https://twitter.com/settings/your_twitter_data/twitter_interests",
+                    "referrerPolicy": "strict-origin-when-cross-origin",
+                    "body": null,
+                    "method": "GET",
+                    "mode": "cors",
+                    "credentials": "include"
+                }).then((response) =>
+                {
+                    if(response.status == 200)
+                    {
+                        response.json().then((prefs) =>
+                        {
+                            const interests = json.interested_in;
+                            if(interests.length == 0) { return; }
+                            const disinterests = prefs.interest_preferences.disabled_interests;
+                            prefs.allow_ads_personalization = false;
+                            prefs.use_cookie_personalization = false;
+                            prefs.is_eu_country = true;
+                            prefs.age_preferences.use_age_for_personalization = false;
+                            prefs.gender_preferences.use_gender_for_personalization = false;
+
+                            for(let i = 0; i < interests.length; i++)
+                            {
+                                disinterests.push(interests[i].id);
+                            }
+
+                            prefs.interest_preferences.disabled_interests = disinterests;
+
+                            fetch("https://twitter.com/i/api/1.1/account/personalization/p13n_preferences.json", {
+                                "headers": {
+                                    "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+                                    "content-type": "application/json",
+                                    "x-csrf-token": cooky,
+                                    "x-twitter-active-user": "yes",
+                                    "x-twitter-auth-type": "OAuth2Session",
+                                    "x-twitter-client-language": "en"
+                                },
+                                "referrer": "https://twitter.com/settings/your_twitter_data/twitter_interests",
+                                "referrerPolicy": "strict-origin-when-cross-origin",
+                                "body": `{"preferences":${JSON.stringify(prefs)}}`,
+                                "method": "POST",
+                                "mode": "cors",
+                                "credentials": "include"
+                            });
+                        });
+                    }
+                });
+
+            });
+        }
+    });
+
+    fetch("https://twitter.com/i/api/graphql/Lt9WPkNBUP-LtG_OPW9FkA/TopicsManagementPage?variables=%7B%22withSuperFollowsUserFields%22%3Afalse%2C%22withDownvotePerspective%22%3Afalse%2C%22withReactionsMetadata%22%3Afalse%2C%22withReactionsPerspective%22%3Afalse%2C%22withSuperFollowsTweetFields%22%3Atrue%7D&features=%7B%22responsive_web_twitter_blue_verified_badge_is_enabled%22%3Afalse%2C%22verified_phone_label_enabled%22%3Afalse%2C%22responsive_web_graphql_timeline_navigation_enabled%22%3Atrue%2C%22unified_cards_ad_metadata_container_dynamic_card_content_query_enabled%22%3Atrue%2C%22tweetypie_unmention_optimization_enabled%22%3Atrue%2C%22responsive_web_uc_gql_enabled%22%3Atrue%2C%22vibe_api_enabled%22%3Atrue%2C%22responsive_web_edit_tweet_api_enabled%22%3Atrue%2C%22graphql_is_translatable_rweb_tweet_is_translatable_enabled%22%3Atrue%2C%22standardized_nudges_misinfo%22%3Atrue%2C%22tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled%22%3Afalse%2C%22interactive_text_enabled%22%3Atrue%2C%22responsive_web_text_conversations_enabled%22%3Afalse%2C%22responsive_web_enhance_cards_enabled%22%3Atrue%7D", {
+        "headers": {
+            "accept": "*/*",
+            "accept-language": "en-US,en;q=0.9",
+            "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+            "content-type": "application/json",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-origin",
+            "x-csrf-token": cooky,
+            "x-twitter-active-user": "yes",
+            "x-twitter-auth-type": "OAuth2Session",
+            "x-twitter-client-language": "en"
+        },
+        "referrer": "https://twitter.com/invert_x/topics/followed",
+        "referrerPolicy": "strict-origin-when-cross-origin",
+        "body": null,
+        "method": "GET",
+        "mode": "cors",
+        "credentials": "include"
+    }).then((resp) => {
+        if(resp.status == 200)
+        {
+            resp.json().then((topics) => {
+                let items = topics.data.viewer.topics_management_page.body.initialTimeline.timeline.timeline.instructions[2].entries;
+
+                for(let t = 0; t < items.length; t++)
+                {
+                    let item = items[t];
+                    if(item.content.clientEventInfo.component == "suggest_followed_topic" && item.content.itemContent.topic.following == true)
+                    {
+                       fetch("https://twitter.com/i/api/graphql/srwjU6JM_ZKTj_QMfUGNcw/TopicUnfollow", {
+                            "headers": {
+                                "accept": "*/*",
+                                "accept-language": "en-US,en;q=0.9",
+                                "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+                                "content-type": "application/json",
+                                "sec-fetch-dest": "empty",
+                                "sec-fetch-mode": "cors",
+                                "sec-fetch-site": "same-origin",
+                                "x-csrf-token": cooky,
+                                "x-twitter-active-user": "yes",
+                                "x-twitter-auth-type": "OAuth2Session",
+                                "x-twitter-client-language": "en"
+                            },
+                            "body": `{"variables":{"topicId":"${item.content.itemContent.topic.topic_id}"},"queryId":""}`,
+                            "method": "POST",
+                            "mode": "cors",
+                            "credentials": "include"
+                        });
+                    }
+                }
+            });
+        }
+    });
 }
 
 function getLinkFromPoster(tweetId)
