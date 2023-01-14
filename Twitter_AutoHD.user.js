@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.71
+// @version      1.72
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -835,11 +835,26 @@ function updateLayoutWidth(width, finalize)
     if (finalize)
     {
         headerColumn = document.body.querySelector('HEADER');
+        headerColumn.style.flexGrow = 0.2;
+        headerColumn.style.webkitBoxFlex = 0.2;
+        setUserPref(usePref_MainWidthKey, width);
+        return;
+       /*
         let flexGrow = 600 / width;
         flexGrow *= flexGrow;
-        headerColumn.style.flexGrow = (width >= 600) ? flexGrow : 1;
-        setUserPref(usePref_MainWidthKey, width);
+        let url = window.location.href;
+        let mainTL = url.endsWith('/messages') || url.includes('/messages/') ? 0 : 1;
+        let flex = (width >= 600) ? flexGrow : mainTL;
+        headerColumn.style.flexGrow = flexGrow;
+        headerColumn.style.webkitBoxFlex = flexGrow;
+        setUserPref(usePref_MainWidthKey, width);*/
     }
+}
+
+function refreshLayoutWidth()
+{
+    let width = getUserPref(usePref_MainWidthKey, 600);
+    updateLayoutWidth(width, true);
 }
 
 async function onTimelineContainerChange(container, mutations)
@@ -1304,7 +1319,8 @@ function addCustomCtxMenu(elem, dlLink, tweetInfo, media)
 
         let curSel = ctxMenu.getAttribute('selection');
 
-        if (wasShowDefaultContextClicked()) { selectedShowDefaultContext = false; } //Skip everything here and show default context menu
+
+        if (wasShowDefaultContextClicked()) { selectedShowDefaultContext = false; return; } //Skip everything here and show default context menu
         if(ctxMenu.style.display != "block" ||
         (ctxMenu.style.display == "block" && (curSel == null ||
                                               (curSel != null && curSel != dlLink))))
@@ -1920,5 +1936,4 @@ async function LoadPrefs()
     addHasAttribute(main, modifiedAttr);
     onMainChange(main);
     watchForChange(main, argsChildOnly, onMainChange);
-
 })();
