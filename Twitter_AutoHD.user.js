@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.72
+// @version      1.73
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -57,6 +57,7 @@ const usePref_toggleFollowed = "thd_toggleFollowed";
 const usePref_toggleTopics = "thd_toggleTopics";
 const usePref_toggleClearTopics = "thd_toggleClearTopics";
 const usePref_lastTopicsClearTime = "thd_lastTopicsClearTime";
+const usePref_toggleTimelineScaling = "thd_toggleTimelineScaling";
 
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
@@ -831,6 +832,8 @@ function primaryColumnResizer(primaryColumn, mouseEvent, mouseDown, mouseUp)
 
 function updateLayoutWidth(width, finalize)
 {
+    if(!toggleTimelineScaling.enabled) { return; }
+
     maxWidthClass.style.setProperty('max-width', width + "px");
     if (finalize)
     {
@@ -917,24 +920,30 @@ async function watchForTimeline(primaryColumn, section)
     progBarObserver.observe(section, { attributes: false, childList: true });
 }
 
+var pageWidthLayoutRule;
+
 async function onMainChange(main, mutations)
 {
     awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>
     {
         if (addHasAttribute(primaryColumn, modifiedAttr)) { return; }
-        var pageWidthLayoutRule = getCSSRuleContainingStyle('width', (("." + main.className).replace(' ', ' .')).split(' '));
-        pageWidthLayoutRule.style.setProperty('width', "100%");
+        if(pageWidthLayoutRule == null) { pageWidthLayoutRule = getCSSRuleContainingStyle('width', (("." + main.className).replace(' ', ' .')).split(' ')); }
 
-        let primaryColumnGrp = primaryColumn.parentElement.parentElement;
-        let columnClassNames = ("." + primaryColumn.className.replace(" ", " .")).split(' ');
+        if(toggleTimelineScaling.enabled)
+        {
+            pageWidthLayoutRule.style.setProperty('width', "100%");
 
-        maxWidthClass = getCSSRuleContainingStyle("max-width", columnClassNames);
-        getUserPref(usePref_MainWidthKey, 600).then((userWidth) => updateLayoutWidth(userWidth, true));
+            let primaryColumnGrp = primaryColumn.parentElement.parentElement;
+            let columnClassNames = ("." + primaryColumn.className.replace(" ", " .")).split(' ');
 
-        primaryColumnGrp.addEventListener('mousemove', (e) => { primaryColumnResizer(primaryColumn, e, false, false) });
-        primaryColumnGrp.addEventListener('mousedown', (e) => { primaryColumnResizer(primaryColumn, e, true, false) });
-        window.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
-        document.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
+            maxWidthClass = getCSSRuleContainingStyle("max-width", columnClassNames);
+            getUserPref(usePref_MainWidthKey, 600).then((userWidth) => updateLayoutWidth(userWidth, true));
+
+            primaryColumnGrp.addEventListener('mousemove', (e) => { primaryColumnResizer(primaryColumn, e, false, false) });
+            primaryColumnGrp.addEventListener('mousedown', (e) => { primaryColumnResizer(primaryColumn, e, true, false) });
+            window.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
+            document.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
+        }
         //  let section = awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub);
         awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => { LogMessage("region found");
             watchForTimeline(primaryColumn, section); });
@@ -957,34 +966,48 @@ async function onMainChange(main, mutations)
 
 //<--> RIGHT SIDEBAR CONTENT <-->//
 
-var toggleNSFW = getToggleObj(usePref_blurNSFW);
-var toggleLiked = getToggleObj(usePref_toggleLiked);
-var toggleFollowed = getToggleObj(usePref_toggleFollowed);
-var toggleRetweet = getToggleObj(usePref_toggleRetweet);
-var toggleTopics = getToggleObj(usePref_toggleTopics);
-var toggleClearTopics = getToggleObj(usePref_toggleClearTopics);
+var toggleNSFW;
+var toggleLiked;
+var toggleFollowed;
+var toggleRetweet;
+var toggleTopics;
+var toggleClearTopics;
+var toggleTimelineScaling;
 
-function getToggleObj(name)
+async function getToggleObj(name)
 {
-    return {enabled:true, elem: null, name: name, onChanged: new EventTarget(), listen: function(func) { this.onChanged.addEventListener(this.name, func); }};
+    let isEnabled = await getUserPref(name, true);
+    return {enabled: isEnabled, elem: null, name: name, onChanged: new EventTarget(), listen: function(func) { this.onChanged.addEventListener(this.name, func); }};
+}
+
+async function loadToggleValues()
+{
+    toggleNSFW = await getToggleObj(usePref_blurNSFW);
+    toggleLiked = await getToggleObj(usePref_toggleLiked);
+    toggleFollowed = await getToggleObj(usePref_toggleFollowed);
+    toggleRetweet = await getToggleObj(usePref_toggleRetweet);
+    toggleTopics = await getToggleObj(usePref_toggleTopics);
+    toggleClearTopics = await getToggleObj(usePref_toggleClearTopics);
+    toggleTimelineScaling = await getToggleObj(usePref_toggleTimelineScaling);
 }
 
 async function setupToggles(sidePanel)
 {
-    createToggleOption(sidePanel, toggleNSFW, false, "NSFW Blur ON", "NSFW Blur OFF");
-
-    createToggleOption(sidePanel, toggleLiked, true, "Liked Tweets ON", "Liked Tweets OFF");
-    createToggleOption(sidePanel, toggleFollowed, false, "Followed By Tweets ON", "Followed By Tweets OFF");
-    createToggleOption(sidePanel, toggleRetweet, true, "Retweets ON", "Retweets OFF");
-    createToggleOption(sidePanel, toggleTopics, false, "Topic Tweets ON", "Topic Tweets OFF");
-    createToggleOption(sidePanel, toggleClearTopics, false, "Interests/Topics Prefs AutoClear ON", "Interests/Topics Prefs AutoClear OFF");
+    createToggleOption(sidePanel, toggleNSFW, false, "NSFW Blur", "ON", "OFF");
+    createToggleOption(sidePanel, toggleLiked, true, "Liked Tweets ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleFollowed, false, "Followed By Tweets ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleRetweet, true, "Retweets ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleTopics, false, "Topic Tweets ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleClearTopics, false, "Interests/Topics Prefs AutoClear ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleTimelineScaling, true, "Timeline Width Scaling ", "ON", "OFF");
 }
 
-async function createToggleOption(sidePanel, toggleState, defaultValue, toggleOnText, toggleOffText)
+async function createToggleOption(sidePanel, toggleState, defaultValue, toggleText, toggleOnText, toggleOffText)
 {
     toggleState.enabled = await getUserPref(toggleState.name, defaultValue);
     toggleState.elem = sidePanel.querySelector('#' + toggleState.name);
-
+    toggleOnText = toggleText + toggleOnText;
+    toggleOffText = toggleText + toggleOffText;
     if (toggleState.elem == null)
     {
         toggleState.elem = createToggleButton(toggleState.enabled ? toggleOnText : toggleOffText, toggleState.name);
@@ -1934,6 +1957,7 @@ async function LoadPrefs()
     });
 
     addHasAttribute(main, modifiedAttr);
+    await loadToggleValues();
     onMainChange(main);
     watchForChange(main, argsChildOnly, onMainChange);
 })();
