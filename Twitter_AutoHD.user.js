@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.73
+// @version      1.74
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -993,7 +993,7 @@ async function loadToggleValues()
 
 async function setupToggles(sidePanel)
 {
-    createToggleOption(sidePanel, toggleNSFW, false, "NSFW Blur", "ON", "OFF");
+    createToggleOption(sidePanel, toggleNSFW, false, "NSFW Blur ", "ON", "OFF");
     createToggleOption(sidePanel, toggleLiked, true, "Liked Tweets ", "ON", "OFF");
     createToggleOption(sidePanel, toggleFollowed, false, "Followed By Tweets ", "ON", "OFF");
     createToggleOption(sidePanel, toggleRetweet, true, "Retweets ", "ON", "OFF");
