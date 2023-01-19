@@ -8,6 +8,8 @@
 
 -Allows click and drag of the right edge of the content feed to shrink/epxand it to your liking. (setting will auto-save for you)
 
+-Hide post views!
+
 -Toggle to collapse the "What's happening?" trending panel.
 
 -Custom context menu when right-clicking an image. This ensures a descriptive filename when saving, like this:</br>
