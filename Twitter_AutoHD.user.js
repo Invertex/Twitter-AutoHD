@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.73
+// @version      1.75
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -58,6 +58,7 @@ const usePref_toggleTopics = "thd_toggleTopics";
 const usePref_toggleClearTopics = "thd_toggleClearTopics";
 const usePref_lastTopicsClearTime = "thd_lastTopicsClearTime";
 const usePref_toggleTimelineScaling = "thd_toggleTimelineScaling";
+const usePref_toggleAnalyticsDisplay = "thd_toggleAnalyticsDisplay";
 
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
@@ -122,19 +123,58 @@ const BuildM3U = function (lines)
 {
     XMLHttpRequest.prototype.open = function (method, url)
     {
-        if (url.includes('video.twimg.com') && url.includes('.m3u8?tag='))
+        if (url.includes('video.twimg.com') && url.includes('.m3u8?'))
         {
             this.addEventListener('readystatechange', function (e)
             {
+
                 if (this.readyState === 4)
                 {
+
                     const lines = e.target.responseText.split('#');
                     const m3u = BuildM3U(lines);
+
                     Object.defineProperty(this, 'response', { writable: true });
                     Object.defineProperty(this, 'responseText', { writable: true });
                     this.response = this.responseText = m3u;
                 }
             });
+        }
+        else if(url.includes('show.json?'))
+        {
+            this.addEventListener('readystatechange', function (e)
+            {
+                if (this.readyState === 4)
+                {
+                    let json = JSON.parse(e.target.response);
+
+                    let vidInfo = json.extended_entities?.media?.video_info ?? null;
+
+                    if(vidInfo != null && vidInfo.variants != null && vidInfo.variants.length > 1)
+                    {
+                        let variants = vidInfo.variants;
+
+                        let lastGoodBitrate = 0;
+                        let baseVariant = variants[0];
+
+                        for(let i = variants.length - 1; i <= 0; i--)
+                        {
+                            let variant = variants[i];
+
+                            if(variant.bitrate != null && (baseVariant.bitrate == null || variant.bitrate > baseVariant.bitrate))
+                            {
+                                baseVariant = variant;
+                                variants[0] = variant;
+                                variants.splice(i, 1);
+                            }
+
+                        }
+
+                        Object.defineProperty(this, 'responseText', { writable: true });
+                        this.responseText = JSON.stringify(json);
+                    }
+                }
+            })
         }
         else if(url.includes('/HomeTimeline'))
         {
@@ -973,6 +1013,10 @@ var toggleRetweet;
 var toggleTopics;
 var toggleClearTopics;
 var toggleTimelineScaling;
+var toggleAnalyticsDisplay;
+
+await loadToggleValues();
+
 
 async function getToggleObj(name)
 {
@@ -989,17 +1033,25 @@ async function loadToggleValues()
     toggleTopics = await getToggleObj(usePref_toggleTopics);
     toggleClearTopics = await getToggleObj(usePref_toggleClearTopics);
     toggleTimelineScaling = await getToggleObj(usePref_toggleTimelineScaling);
+    toggleAnalyticsDisplay = await getToggleObj(usePref_toggleAnalyticsDisplay);
+
+    if(!toggleAnalyticsDisplay.enabled)
+    {
+        addGlobalStyle('div[role="group"] > div > a[href$="/analytics"] { display: none !important;}');
+    }
 }
+
 
 async function setupToggles(sidePanel)
 {
-    createToggleOption(sidePanel, toggleNSFW, false, "NSFW Blur", "ON", "OFF");
+    createToggleOption(sidePanel, toggleNSFW, false, "NSFW Blur ", "ON", "OFF");
     createToggleOption(sidePanel, toggleLiked, true, "Liked Tweets ", "ON", "OFF");
     createToggleOption(sidePanel, toggleFollowed, false, "Followed By Tweets ", "ON", "OFF");
     createToggleOption(sidePanel, toggleRetweet, true, "Retweets ", "ON", "OFF");
     createToggleOption(sidePanel, toggleTopics, false, "Topic Tweets ", "ON", "OFF");
     createToggleOption(sidePanel, toggleClearTopics, false, "Interests/Topics Prefs AutoClear ", "ON", "OFF");
     createToggleOption(sidePanel, toggleTimelineScaling, true, "Timeline Width Scaling ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleAnalyticsDisplay, false, "Show Post Views ", "ON", "OFF");
 }
 
 async function createToggleOption(sidePanel, toggleState, defaultValue, toggleText, toggleOnText, toggleOffText)
