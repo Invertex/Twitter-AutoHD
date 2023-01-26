@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.75
+// @version      1.76
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -37,6 +37,9 @@ const argsChildAndAttr = { attributes: true, childList: true, subtree: false };
 
 const dlSVG = '<g><path d="M 8 51 C 5 54 5 48 5 42 L 5 -40 C 5 -45 -5 -45 -5 -40 V 42 C -5 48 -5 54 -8 51 L -48 15 C -51 12 -61 17 -56 22 L -12 61 C 0 71 0 71 12 61 L 56 22 C 61 17 52 11 48 15 Z"></path>' +
     '<path d="M 56 -58 C 62 -58 62 -68 56 -68 H -56 C -62 -68 -62 -58 -56 -58 Z"></path></g>';
+
+const bookmarkSVG = '<g><path d="M17 3V0h2v3h3v2h-3v3h-2V5h-3V3h3zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V11h2v11.94l-8-5.71-8 5.71V4.5C4 3.12 5.119 2 6.5 2h4.502v2H6.5z"></path></g>';
+const unbookmarkSVG = '<g><path d="M16.586 4l-2.043-2.04L15.957.54 18 2.59 20.043.54l1.414 1.42L19.414 4l2.043 2.04-1.414 1.42L18 5.41l-2.043 2.05-1.414-1.42L16.586 4zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V11h2v11.94l-8-5.71-8 5.71V4.5C4 3.12 5.119 2 6.5 2h4.502v2H6.5z"></path></g>';
 
 addGlobalStyle('@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }');
 addGlobalStyle('.loader { border: 16px solid #f3f3f373; display: flex; margin: auto; border-top: 16px solid #3498db99; border-radius: 50%; width: 120px; height: 120px; animation: spin 2s linear infinite;}');
@@ -254,11 +257,13 @@ function processTweetsQuery(entries)
     return entries;
 }
 
-async function addDownloadButton(tweet, vidUrl, tweetInfo)
+
+function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor)
 {
-    //console.log("add dl button");
-    let getButtonToDupe = function (btnGrp) { return buttonGrp.lastChild.cloneNode(true); };
+        //console.log("add dl button");
+    let getButtonToDupe = function (btnGrp) { return btnGrp.lastChild.cloneNode(true); };
     let isIframe = false;
+    let id = "thd_button_" + name;
 
     let buttonGrp = tweet.closest('article[role="article"]')?.querySelector('div[role="group"][id^="id__"]');
     if (buttonGrp == null) //Try iframe version
@@ -269,47 +274,113 @@ async function addDownloadButton(tweet, vidUrl, tweetInfo)
             isIframe = true;
             getButtonToDupe = function (btnGrp)
             {
-                return buttonGrp.querySelector('a:nth-child(2)').cloneNode(true);
+                return btnGrp.querySelector('a:nth-child(2)').cloneNode(true);
             };
         }
     }
-    if (buttonGrp == null || buttonGrp.querySelector('div#thd_dl') != null) { return; } //Button group doesn't exist or we already processed this element and added a DL button
+    if (buttonGrp == null || buttonGrp.querySelector("div#" + id) != null) { return null; } //Button group doesn't exist or we already processed this element and added a DL button
 
+    buttonGrp.style.maxWidth = "100%";
+
+    let btn = getButtonToDupe(buttonGrp);
+
+    if(btn != null)
+    {
+        buttonGrp.appendChild(btn);
+        btn.id = id;
+        btn.style.marginRight = "8px";
+        btn.style.marginLeft = "8px";
+        $(btn.parentNode).addClass(btn.className);
+
+        const iconDiv = isIframe ? btn.querySelector('div[dir="auto"]') : btn.querySelector('div[dir="ltr"]');
+        const svgElem = btn.querySelector('svg');
+        const bg = isIframe ? svgElem.parentElement : iconDiv.firstElementChild.firstElementChild;
+
+        svgElem.innerHTML = svg;
+
+        svgElem.setAttribute('viewBox', svgViewBox);
+
+        const oldBGColor = $(bg).css("background-color");
+        const oldIconColor = $(iconDiv).css("color");
+        //Emulate Twitter hover color change
+        $(btn).hover(function ()
+                       {
+            $(bg).css("background-color", bgColor);
+            $(bg).css("border-radius", "20px");
+            $(svgElem).css("color", color);
+        }, function ()
+                       {
+            $(bg).css("background-color", oldBGColor);
+            $(svgElem).css("color", oldIconColor);
+        });
+    }
+
+    return {btn: btn, inIframe: isIframe};
+}
+
+
+async function addBookmarkButton(tweet)
+{
+    const btnCopy = getPostButtonCopy(tweet, "bm", bookmarkSVG, "0 0 24 24", "#B000B5FF", "#f3d60720");
+    if(btnCopy == null) { return; }
+
+    let btn = btnCopy.btn;
+    if(btn != null)
+    {
+        let id = "";
+
+        let link = tweet.querySelector('div > a[href*="/status/"] > time');
+        if(link)
+        {
+            link = link.parentElement;
+            id = getIDFromURL(link.href);
+        }
+        else
+        {
+            id = getIDFromTweet(tweet);
+        }
+
+        $(btn).click(function (e)
+       {
+                e.preventDefault();
+                e.stopPropagation();
+            bookmarkPost(id);
+            console.log("bookmarked");
+            });
+
+      //  btn.addEventListener(new MouseEvent('click'), ()=> { });
+    }
+}
+
+async function addDownloadButton(tweet, vidUrl, tweetInfo)
+{
+
+    const btnCopy = getPostButtonCopy(tweet, "dl", dlSVG, "-80 -80 160 160", "#f3d607FF", "#f3d60720");
+      if(btnCopy == null) { return; }
+    const dlBtn = btnCopy.btn;
+
+    if(dlBtn == null || btnCopy == null) { return; }
+
+    let isIframe = btnCopy.inIframe;
     const filename = filenameFromTweetInfo(tweetInfo);
-    const dlBtn = getButtonToDupe(buttonGrp);
 
-    dlBtn.id = "thd_dl";
-    buttonGrp.appendChild(dlBtn);
     dlBtn.href = vidUrl;
 
-    const svg = dlBtn.querySelector('svg');
-    svg.innerHTML = dlSVG;
-    svg.setAttribute('viewBox', "-80 -80 160 160");
-
-    const iconDiv = isIframe ? dlBtn.querySelector('div[dir="auto"]') : dlBtn.querySelector('div[dir="ltr"]');
-    const bg = isIframe ? svg.parentElement : iconDiv.firstElementChild.firstElementChild;
-    const linkElem = isIframe ? dlBtn : $(dlBtn).wrapAll(`<a href="${vidUrl}" download="${filename}" style="${dlBtn.style.cssText}"></a>`);
-
-    const oldBGColor = $(bg).css("background-color");
-    const oldIconColor = $(iconDiv).css("color");
-    //Emulate Twitter hover color change
-    $(dlBtn).hover(function ()
-    {
-        $(bg).css("background-color", "#f3d60720");
-        $(bg).css("border-radius", "20px");
-        $(svg).css("color", "#f3d607FF");
-    }, function ()
-    {
-        $(bg).css("background-color", oldBGColor);
-        $(svg).css("color", oldIconColor);
-    });
+    const linkElem = isIframe ? dlBtn : $(dlBtn).wrapAll(`<a href="${vidUrl}" download="${filename}" style=""></a>`)[0].parentElement;
 
     if (isIframe)
     {
         linkElem.setAttribute('download', filename);
         dlBtn.querySelector('div[dir="auto"] > span').innerText = "Download";
     }
-    $(dlBtn.parentNode).addClass(dlBtn.className);
+    else
+    {
+        dlBtn.style.marginLeft = "";
+        linkElem.style.cssText = dlBtn.style.cssText;
+        dlBtn.style.marginRight = "";
+    }
+
+
     $(linkElem).click(function (e) { e.preventDefault();
         e.stopPropagation();
         download(vidUrl, filename); });
@@ -655,16 +726,19 @@ async function processTweet(tweet, tweetObserver)
 
     let foundContent = false;
 
+     addBookmarkButton(tweet);
+
    // let waitForLoad = await awaitElem(tweet, 'div[data-testid="tweetPhoto"]', argsChildAndSub);
     const tweetPhotos = tweet.querySelectorAll('div[data-testid="tweetPhoto"]');
     const subElems = tweetPhotos.length;
 
     if(subElems == 0) { return; }
 
-
-let content = await awaitElem(tweetPhotos[0], 'div[aria-label="Image"] img[alt="Image"], video', argsChildAndSub);
+    let content = await awaitElem(tweetPhotos[0], 'div[aria-label="Image"] img[alt="Image"], video', argsChildAndSub);
   /*
 */
+
+
     const allLinks = Array.from(tweet.querySelectorAll('a'));
 
     const imgLinks = [];
@@ -964,9 +1038,18 @@ var pageWidthLayoutRule;
 
 async function onMainChange(main, mutations)
 {
+    console.log("on main change");
     awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>
     {
         if (addHasAttribute(primaryColumn, modifiedAttr)) { return; }
+
+        //Watch to handle case where timelines are partially lost when clicking on the quoted post name.
+        watchForChange(primaryColumn.firstElementChild, argsChildOnly, () => {
+            awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => {
+               watchForTimeline(primaryColumn, section);
+            });
+        });
+
         if(pageWidthLayoutRule == null) { pageWidthLayoutRule = getCSSRuleContainingStyle('width', (("." + main.className).replace(' ', ' .')).split(' ')); }
 
         if(toggleTimelineScaling.enabled)
@@ -984,9 +1067,12 @@ async function onMainChange(main, mutations)
             window.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
             document.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
         }
+
+
         //  let section = awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub);
         awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => { LogMessage("region found");
-            watchForTimeline(primaryColumn, section); });
+            watchForTimeline(primaryColumn, section);
+       });
     });
     awaitElem(main, 'div[data-testid="sidebarColumn"]', argsChildAndSub).then((sideBar) =>
     {
@@ -1498,6 +1584,21 @@ function getUrlFromTweet(tweet)
     return null;
 }
 
+function getIDFromTweet(tweet)
+{
+    let url = getUrlFromTweet(tweet);
+    return getIDFromURL(url);
+}
+
+function getIDFromURL(url)
+{
+    url = url.split('?')[0].split('/photo/')[0];
+    let urlSplit = url.split('/status/');
+    let id = urlSplit[1].split('/')[0];
+
+    return id;
+}
+
 async function getTweetInfo(tweet)
 {
     let link = getUrlFromTweet(tweet);
@@ -1508,6 +1609,7 @@ async function getTweetInfo(tweet)
     let photoUrl = url.split('/photo/');
     url = photoUrl[0];
     let urlSplit = url.split('/status/');
+
     let id = urlSplit[1].split('/')[0];
 
     let subTweet = tweet.querySelector('div[data-testid="tweetPhoto"] div[tabindex]');
@@ -1570,7 +1672,7 @@ const fetchURL = "https://api.twitter.com/1.1/statuses/show.json?skip_status=1&i
 function initFetch()
 {
     let init = {
-            origin: 'https://mobile.twitter.com',
+            origin: 'https://twitter.com',
             headers:
             {
                 "Accept": '*/*',
@@ -1579,7 +1681,7 @@ function initFetch()
                 "x-csrf-token": cooky,
             },
             credentials: 'include',
-            referrer: 'https://mobile.twitter.com'
+            referrer: 'https://twitter.com'
         };
 
     return init;
@@ -1751,6 +1853,30 @@ async function clearTopicsAndInterests(force = false)
                 }
             });
         }
+    });
+}
+
+async function bookmarkPost(postId)
+{
+    fetch("https://api.twitter.com/graphql/aoDbu3RHznuiSkQ9aNM67Q/CreateBookmark", {
+        "headers": {
+            "accept": "*/*",
+            "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+            "content-type": "application/json",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-site",
+            "x-csrf-token": cooky,
+            "x-twitter-active-user": "yes",
+            "x-twitter-auth-type": "OAuth2Session",
+            "x-twitter-client-language": "en"
+        },
+        "referrer": "https://twitter.com/",
+      //  "referrerPolicy": "strict-origin-when-cross-origin",
+        "body": `{"variables":{"tweet_id":"${postId}"},"queryId":"aoDbu3RHznuiSkQ9aNM67Q"}`,
+        "method": "POST",
+        "mode": "cors",
+        "credentials": "include"
     });
 }
 
