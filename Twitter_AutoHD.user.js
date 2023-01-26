@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.76
+// @version      1.77
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -291,7 +291,8 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor)
         btn.style.marginRight = "8px";
         btn.style.marginLeft = "8px";
         $(btn.parentNode).addClass(btn.className);
-
+        btn.setAttribute('aria-label', name);
+        btn.title = name;
         const iconDiv = isIframe ? btn.querySelector('div[dir="auto"]') : btn.querySelector('div[dir="ltr"]');
         const svgElem = btn.querySelector('svg');
         const bg = isIframe ? svgElem.parentElement : iconDiv.firstElementChild.firstElementChild;
@@ -321,7 +322,7 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor)
 
 async function addBookmarkButton(tweet)
 {
-    const btnCopy = getPostButtonCopy(tweet, "bm", bookmarkSVG, "0 0 24 24", "#B000B5FF", "#f3d60720");
+    const btnCopy = getPostButtonCopy(tweet, "Bookmark", bookmarkSVG, "0 0 24 24", "#B000B5FF", "#f3d60720");
     if(btnCopy == null) { return; }
 
     let btn = btnCopy.btn;
@@ -355,7 +356,7 @@ async function addBookmarkButton(tweet)
 async function addDownloadButton(tweet, vidUrl, tweetInfo)
 {
 
-    const btnCopy = getPostButtonCopy(tweet, "dl", dlSVG, "-80 -80 160 160", "#f3d607FF", "#f3d60720");
+    const btnCopy = getPostButtonCopy(tweet, "Download", dlSVG, "-80 -80 160 160", "#f3d607FF", "#f3d60720");
       if(btnCopy == null) { return; }
     const dlBtn = btnCopy.btn;
 
