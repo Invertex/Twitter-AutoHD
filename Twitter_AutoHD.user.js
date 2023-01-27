@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.79
+// @version      1.80
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -328,7 +328,7 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor)
 
 async function addBookmarkButton(tweet)
 {
-    const btnCopy = getPostButtonCopy(tweet, "Bookmark", bookmarkSVG, "0 0 24 24", "#B000B5FF", "#f3d60720");
+    const btnCopy = getPostButtonCopy(tweet, "Bookmark", bookmarkSVG, "0 0 24 24", "#B000B5FF", "#B000B520");
     if(btnCopy == null) { return; }
 
     let btn = btnCopy.btn;
