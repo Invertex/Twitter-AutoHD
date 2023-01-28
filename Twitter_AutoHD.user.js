@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.80
+// @version      1.81
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -219,7 +219,6 @@ function processTweetsQuery(entries)
 {
     for(let i = entries.length - 1; i >= 0; i--)
     {
-
         let entry = entries[i];
 
         if(entry.content == null || entry.content.itemContent == null || entry.content.itemContent.tweet_results == null) { continue; }
@@ -361,9 +360,9 @@ async function addBookmarkButton(tweet)
 
 async function addDownloadButton(tweet, vidUrl, tweetInfo)
 {
-
     const btnCopy = getPostButtonCopy(tweet, "Download", dlSVG, "-80 -80 160 160", "#f3d607FF", "#f3d60720");
-      if(btnCopy == null) { return; }
+    if(btnCopy == null) { return; }
+
     const dlBtn = btnCopy.btn;
 
     if(dlBtn == null || btnCopy == null) { return; }
@@ -372,6 +371,10 @@ async function addDownloadButton(tweet, vidUrl, tweetInfo)
     const filename = filenameFromTweetInfo(tweetInfo);
 
     dlBtn.href = vidUrl;
+
+    let vidElem = tweet.querySelector('div[data-testid="videoPlayer"]');
+    let vidCont = vidElem.querySelector('video');
+    addCustomCtxMenu(vidElem, vidUrl, tweetInfo, vidElem);
 
     const linkElem = isIframe ? dlBtn : $(dlBtn).wrapAll(`<a href="${vidUrl}" download="${filename}" style=""></a>`)[0].parentElement;
 
@@ -392,7 +395,6 @@ async function addDownloadButton(tweet, vidUrl, tweetInfo)
         e.stopPropagation();
         download(vidUrl, filename); });
 }
-
 
 async function updateEmbedMedia(tweet, embed)
 {
@@ -725,6 +727,17 @@ async function replaceVideoElement(tweet, vidElem)
     return true;
 }
 
+function isAdvert(tweet)
+{
+    let impression = tweet.querySelector('div[data-testid="placementTracking"] div[data-testid$="impression-pixel"]');
+    if(impression)
+    {
+        tweet.style.display = "none";
+        return true;
+    }
+    return false;
+}
+
 async function processTweet(tweet, tweetObserver)
 {
 
@@ -744,7 +757,7 @@ async function processTweet(tweet, tweetObserver)
     let content = await awaitElem(tweetPhotos[0], 'div[aria-label="Image"] img[alt="Image"], video', argsChildAndSub);
   /*
 */
-
+    if(isAdvert(tweet)) { return; }
 
     const allLinks = Array.from(tweet.querySelectorAll('a'));
 
@@ -774,7 +787,6 @@ async function processTweet(tweet, tweetObserver)
 
             if(vidContainer != null)
             {
-
                 let video = await awaitElem(vidContainer, 'VIDEO', argsChildAndSub);
 
                 processBlurButton(tweet);
@@ -1277,14 +1289,22 @@ function createToggleButton(text, id)
     return btn;
 }
 
-//<--> FULL-SCREEN IMAGE VIEW RELATED <-->//
+async function watchForComments(dialog)
+{
+    let commentList = await awaitElem(dialog, 'div[style^="position: relative"]', argsChildAndSub);
+    observeTimeline(commentList);
+}
 
+//<--> FULL-SCREEN IMAGE VIEW RELATED <-->//
 async function onLayersChange(layers, mutation)
 {
     if (mutation.addedNodes != null && mutation.addedNodes.length > 0)
     {
         const contentContainer = Array.from(mutation.addedNodes)[0];
         const dialog = await awaitElem(contentContainer, 'div[role="dialog"]', argsChildAndSub);
+
+        watchForComments(dialog);
+
         const img = await awaitElem(dialog, 'img[alt="Image"]', argsChildAndSub);
         const list = dialog.querySelector('ul[role="list"]');
         let tweetInfo = await getTweetInfo(img);
