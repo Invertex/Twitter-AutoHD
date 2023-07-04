@@ -126,11 +126,6 @@ const BuildM3U = function (lines)
 {
     XMLHttpRequest.prototype.open = function (method, url)
     {
-        if(url.includes('/HomeTimeline'))
-        {
-
-      //      console.log(url);
-        }
         if (url.includes('video.twimg.com') && url.includes('.m3u8?'))
         {
             this.addEventListener('readystatechange', function (e)
