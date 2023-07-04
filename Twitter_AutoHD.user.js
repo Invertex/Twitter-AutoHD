@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.86
+// @version      1.88
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -179,7 +179,7 @@ const BuildM3U = function (lines)
                 }
             })
         }
-        else if(url.includes('/HomeTimeline'))
+        else if(url.includes('/HomeTimeline') || url.includes('includePromotedContent'))
         {
          //   url = url.replace('Community%22%3Atrue%2C%22withSuperFollowsUserFields%22%3Atrue', 'Community%22%3Afalse%2C%22withSuperFollowsUserFields%22%3Afalse');
         //    url = url.replace('withSuperFollowsTweetFields%22%3Atrue', 'withSuperFollowsTweetFields%22%3Afalse');
@@ -208,6 +208,13 @@ const BuildM3U = function (lines)
 
                         this.responseText = JSON.stringify(json);
                     }
+                    else if(json.data.threaded_conversation_with_injections_v2)
+                    {
+                        json.data.threaded_conversation_with_injections_v2.instructions[0].entries = processTweetsQuery(json.data.threaded_conversation_with_injections_v2.instructions[0].entries);
+                        Object.defineProperty(this, 'responseText', { writable: true });
+
+                        this.responseText = JSON.stringify(json);
+                    }
                 }
             })
         }
@@ -222,32 +229,43 @@ function processTweetsQuery(entries)
     for(let i = entries.length - 1; i >= 0; i--)
     {
         let entry = entries[i];
+        let content = entry.content;
+        if(content == null) { continue; }
 
-        if(entry.content == null || entry.content.itemContent == null || entry.content.itemContent.tweet_results == null) { continue; }
+        if(content.items)
+        {
+            content = content.items[0].item.itemContent;
+        }
+        else
+        {
+            content = content.itemContent;
+        }
+
+        if(content == null || content.tweet_results == null) { continue; }
         if(firstRun && entries.length <= 4) //Avoid the timeline freezing from not enough initial entries
         {
             continue;
         }
 
-        if(entry.content.itemContent && entry.content.itemContent.promotedMetadata && entry.content.itemContent.promotedMetadata.advertiser_results)
+        if(content.promotedMetadata && content.promotedMetadata.advertiser_results)
         {
             entries.splice(i, 1);
         }
-        else if(entries[i].content.itemContent && entries[i].content.itemContent.socialContext)
+        else if(content.socialContext)
         {
 
-            let contextType = entry.content.itemContent.socialContext.contextType;
+            let contextType = content.socialContext.contextType;
 
-            if((!toggleLiked.enabled && contextType == "Like") || (!toggleFollowed.enabled && contextType == "Follow") || (!toggleTopics.enabled && entry.content.itemContent.socialContext.type == "TimelineTopicContext"))
+            if((!toggleLiked.enabled && contextType == "Like") || (!toggleFollowed.enabled && contextType == "Follow") || (!toggleTopics.enabled && content.socialContext.type == "TimelineTopicContext"))
             {
                 entries.splice(i, 1);
             }
 
         }
         else if(!toggleRetweet.enabled
-                && entry.content.itemContent.tweet_results.result.legacy != null
-                && entry.content.itemContent.tweet_results.result.legacy.retweeted_status_result != null
-               && entry.content.itemContent.tweet_results.result.legacy.retweeted_status_result.result.core.user_results.result.legacy.following == false) //Only hide the Retweet if it's not the user's own tweet
+                && content.tweet_results.result.legacy != null
+                && content.tweet_results.result.legacy.retweeted_status_result != null
+               && content.tweet_results.result.legacy.retweeted_status_result.result.core.user_results.result.legacy.following == false) //Only hide the Retweet if it's not the user's own tweet
         {
 
              entries.splice(i, 1);
