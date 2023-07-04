@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.83
+// @version      1.85
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -126,6 +126,11 @@ const BuildM3U = function (lines)
 {
     XMLHttpRequest.prototype.open = function (method, url)
     {
+        if(url.includes('/HomeTimeline'))
+        {
+
+      //      console.log(url);
+        }
         if (url.includes('video.twimg.com') && url.includes('.m3u8?'))
         {
             this.addEventListener('readystatechange', function (e)
@@ -181,14 +186,17 @@ const BuildM3U = function (lines)
         }
         else if(url.includes('/HomeTimeline'))
         {
-         //   url = url.replace('includePromotedContent%22%3Atrue%2C%22','');
          //   url = url.replace('Community%22%3Atrue%2C%22withSuperFollowsUserFields%22%3Atrue', 'Community%22%3Afalse%2C%22withSuperFollowsUserFields%22%3Afalse');
         //    url = url.replace('withSuperFollowsTweetFields%22%3Atrue', 'withSuperFollowsTweetFields%22%3Afalse');
          //   url = url.replace('latestControlAvailable%22%3Atrue', 'latestControlAvailable%22%3Afalse');
          //   url = url.replace('vibe_api_enabled%22%3Atrue', 'vibe_api_enabled%22%3Afalse');
         //    url = url.replace('withDownvotePerspective%22%3Afalse', 'withDownvotePerspective%22%3Atrue');
-
-           url = url.replace('count%22%3A20', 'count%22%3A50');
+            url = url.replace('includePromotedContent%22%3Atrue', 'includePromotedContent%22%3Afalse');
+            url = url.replace('phone_label_enabled%22%3Afalse', 'phone_label_enabled%22%3Atrue');
+            url = url.replace('reach_fetch_enabled%22%3Atrue', 'reach_fetch_enabled%22%3Afalse');
+            url = url.replace('withQuickPromoteEligibilityTweetFields%22%3Atrue', 'withQuickPromoteEligibilityTweetFields%22%3Afalse');
+            url = url.replace('article_tweet_consumption_enabled%22%3Atrue', 'article_tweet_consumption_enabled%22%3Afalse');
+            url = url.replace('count%22%3A20', 'count%22%3A50');
 
             this.addEventListener('readystatechange', function (e)
             {
@@ -208,7 +216,6 @@ const BuildM3U = function (lines)
                 }
             })
         }
-
         open.apply(this, arguments);
     };
 })(XMLHttpRequest.prototype.open);
@@ -648,13 +655,14 @@ async function onPlayButtonChange(vid, playContainer)
             };
 
         }
-        else { /* console.log(" no spanner found");*/ }
+     //   else { /* console.log(" no spanner found");*/ }
     }
 }
 
 async function watchPlayButton(vidElem)
 {
-    let playContainer = vidElem.parentElement.parentElement.parentElement;
+    let playContainer = vidElem.parentElement?.parentElement?.parentElement ?? vidElem.parentElement;
+    if(playerContainer == null) { return; }
     let gifPlayBtn = playContainer.querySelector('div[tabindex="0"][role="button"]');
 
     if (gifPlayBtn)
@@ -1057,7 +1065,7 @@ var pageWidthLayoutRule;
 
 async function onMainChange(main, mutations)
 {
-    console.log("on main change");
+  //  console.log("on main change");
     awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>
     {
         if (addHasAttribute(primaryColumn, modifiedAttr)) { return; }
@@ -1097,6 +1105,8 @@ async function onMainChange(main, mutations)
     {
         awaitElem(sideBar, 'section[role="region"] > [role="heading"]', argsChildAndSub).then((sideBarTrending) =>
         {
+            let veriNag = sideBar.querySelector('aside');
+            if(veriNag != null) { veriNag.parentElement.style.display = "none";}
             setupTrendingControls(sideBarTrending.parentElement);
             setupToggles(sideBar);
             clearTopicsAndInterests();
@@ -1923,7 +1933,18 @@ function getLinkFromPoster(tweetId)
                     {
                         if(json.is_quote_status == true)
                         {
-                            resolve(json.entities.urls[0].expanded_url);
+                            let quoteUrl = null;
+
+                            if(json.entities != null && json.entities.urls != null)
+                            {
+                                quoteUrl = json.entities.urls[0].expanded_url;
+                            }
+                            else if(json.quoted_status_permalink != null)
+                            {
+                                quoteUrl = json.quoted_status_permalink.expanded;
+                            }
+
+                            resolve(quoteUrl);
                             return;
                         }
                         resolve(null);
