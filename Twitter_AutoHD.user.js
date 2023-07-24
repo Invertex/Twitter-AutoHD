@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.0
+// @version      2.1
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -211,7 +211,7 @@ const BuildM3U = function (lines)
                  if (this.readyState === 4)
                 {
        console.log(e.target.responseText);
-          
+
                 }
 
              });
@@ -240,6 +240,7 @@ function stripVariants(variants)
 function processResponseMedia(medias)
 {
     if(medias == null){ return; }
+
     for(let i = 0; i < medias.length; i++)
     {
         let media = medias[i];
@@ -266,7 +267,9 @@ function Tweet(tweetResult)
         if(this.data?.tweet) { this.data = this.data.tweet; }
     }
     this.media = this.data?.legacy?.extended_entities?.media;
+    this.mediaBasic = this.data?.legacy?.entities?.media;
     this.hasMedia = this.media != null;
+
     this.quote = this.data?.quoted_status_result?.result;
     this.isQuote = this.quote != null;
     if(this.isQuote) { this.quote = new Tweet(this.quote); }
@@ -302,10 +305,12 @@ function processTimelineItem(item)
         if(tweet.hasMedia)
         {
             processResponseMedia(tweet.media);
+            processResponseMedia(tweet.mediaBasic);
         }
-        if(tweet.isRetweet && tweet.quoteHasMedia)
+        if(tweet.isQuote && tweet.quoteHasMedia)
         {
             processResponseMedia(tweet.quote.media);
+            processResponseMedia(tweet.quote.mediaBasic);
         }
     }
 }
@@ -657,11 +662,11 @@ function waitForImgLoad(img)
 
 function updateImgSrc(imgElem, bgElem, src)
 {
-  //  if (imgElem.src != src)
-  //  {
-     //   imgElem.src = src;
-     //   bgElem.style.backgroundImage = `url("${src}")`;
-  //  }
+    if (imgElem.src != src)
+    {
+        imgElem.src = src;
+        bgElem.style.backgroundImage = `url("${src}")`;
+    }
 };
 
 async function updateImageElement(tweetInfo, imgLink, imgCnt)
@@ -669,10 +674,10 @@ async function updateImageElement(tweetInfo, imgLink, imgCnt)
     const imgContainer = await awaitElem(imgLink, 'div[aria-label="Image"], div[data-testid="tweetPhoto"]', argsChildAndSub);
 
     const img = await awaitElem(imgContainer, 'IMG', argsChildAndSub);
-    const hqSrc = img.src;
+    const hqSrc = getHighQualityImage(img.src);
 
     const bg = imgContainer.querySelector('div[style^="background-image"]');
-    // LogMessage(imgLink);
+
     addCustomCtxMenu(imgLink, hqSrc, tweetInfo, img);
     img.setAttribute(modifiedAttr, "");
 
@@ -1554,8 +1559,8 @@ async function updateFullViewImage(img, tweetInfo)
 {
   //  if (addHasAttribute(img, "thd_modified")) { return; }
     let bg = img.parentElement.querySelector('div');
-  //  let hqSrc = getHighQualityImage(img.src);
-     let hqSrc = img.src;
+    let hqSrc = getHighQualityImage(img.src);
+   //  let hqSrc = img.src;
     addCustomCtxMenu(img, hqSrc, tweetInfo, img);
     updateImgSrc(img, bg, hqSrc);
     doOnAttributeChange(img, (imgElem) => { updateImgSrc(imgElem, bg, hqSrc); }, false);
@@ -2324,7 +2329,7 @@ function getVidURL(id, vidElem, matchId)
                 else { resolve(null); }
             }).catch((err) => { console.log(err); console.log(fetchURL + id); console.log(init); reject({ error: err });
                 resolve(null); });*/
- 
+
     });
 }
 
@@ -2372,7 +2377,7 @@ async function awaitElem(root, query, obsArguments)
     return new Promise((resolve, reject) =>
     {
         if (findElem(root, query, null, resolve)) { return; }
-        const rootObserver = new MutationObserver((mutes, obs) => { findElem(root, query, obs, resolve); });
+        const rootObserver = new MutationObserver((mutes, obs) => { if(findElem(root, query, obs, resolve)) { rootObserver.disconnect();} });
         rootObserver.observe(root, obsArguments);
     });
 }
@@ -2470,6 +2475,12 @@ var tweets = new Map(); //Cache intercepted tweets
 
 async function swapTwitterLogo(reactRoot)
 {
+    let placeholder = reactRoot.querySelector('div#placeholder svg');
+    if(placeholder != null)
+    {
+        placeholder.innerHTML = twitSVG;
+    }
+
     let logo = await awaitElem(reactRoot, 'header h1 > a svg', argsChildAndSub);
     logo.innerHTML = twitSVG;
 }
