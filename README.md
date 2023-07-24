@@ -32,6 +32,8 @@ No stupid X logo! Original Twitter bird instead :)</br>
 <img src="https://cdn.discordapp.com/attachments/620469307532509195/1133032301182337054/image.png"/></br></br>
 Video download button:<br/>
 <img src="https://i.imgur.com/h5YeMWx.gif"/></br></br>
+Custom context menus:<br/>
+<a href="https://twitter.com/qt_mantis/status/1682837037135675392" target="_blank"><img src="https://i.gyazo.com/60a6ce0983f46e0d7fe360c01ee27e42.png"/></a></br></br>
 Image layout:
 Original           |  Twitter AutoHD
 :-------------------------:|:-------------------------:
