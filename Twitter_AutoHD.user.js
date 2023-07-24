@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.1
+// @version      2.14
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -545,7 +545,7 @@ async function addBookmarkButton(tweet)
     {
         id = getIDFromTweet(tweet);
     }
-
+    if(id == null) { return; }
     let onHoverStopped = function(svgElem, tweetID)
     {
          let tweetData = tweets.get(tweetID);
@@ -975,10 +975,10 @@ async function processTweet(tweet, tweetObserver)
 
     if(subElems == 0) { return; }
 
-    let content = await awaitElem(tweetPhotos[0], 'video, div[aria-label="Image"] img[alt="Image"]', argsChildAndSub);
+  //  let content = await awaitElem(tweetPhotos[0], 'div[data-testid="tweetPhoto"] img[alt="Image"],video', argsChildAndSub);
   /*
 */
-
+//console.log(content);
     if(isAdvert(tweet)) { return; }
 
     const allLinks = Array.from(tweet.querySelectorAll('a'));
@@ -1034,6 +1034,7 @@ async function processTweet(tweet, tweetObserver)
     {
         //  tweetObserver.disconnect();
         updateImageElements(tweet, imgLinks);
+
         foundContent = true;
     }
     if (quoteImgLinks.length > 0)
@@ -1122,6 +1123,7 @@ function setupFilters(tweet)
 
 async function listenForMediaType(tweet)
 {
+
    // setupFilters(tweet)
     if (addHasAttribute(tweet, "thd_observing")) { return; }
 
@@ -1839,6 +1841,7 @@ function getUrlFromTweet(tweet)
 function getIDFromTweet(tweet)
 {
     let url = getUrlFromTweet(tweet);
+    if(url == null) {return null;}
     return getIDFromURL(url);
 }
 
