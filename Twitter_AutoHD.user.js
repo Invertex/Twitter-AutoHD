@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      1.88
+// @version      2.0
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -37,6 +37,8 @@ const argsChildAndAttr = { attributes: true, childList: true, subtree: false };
 
 const dlSVG = '<g><path d="M 8 51 C 5 54 5 48 5 42 L 5 -40 C 5 -45 -5 -45 -5 -40 V 42 C -5 48 -5 54 -8 51 L -48 15 C -51 12 -61 17 -56 22 L -12 61 C 0 71 0 71 12 61 L 56 22 C 61 17 52 11 48 15 Z"></path>' +
     '<path d="M 56 -58 C 62 -58 62 -68 56 -68 H -56 C -62 -68 -62 -58 -56 -58 Z"></path></g>';
+
+const twitSVG = '<g><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"></path></g>';
 
 const bookmarkSVG = '<g><path d="M17 3V0h2v3h3v2h-3v3h-2V5h-3V3h3zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V11h2v11.94l-8-5.71-8 5.71V4.5C4 3.12 5.119 2 6.5 2h4.502v2H6.5z"></path></g>';
 const unbookmarkSVG = '<g><path d="M16.586 4l-2.043-2.04L15.957.54 18 2.59 20.043.54l1.414 1.42L19.414 4l2.043 2.04-1.414 1.42L18 5.41l-2.043 2.05-1.414-1.42L16.586 4zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V11h2v11.94l-8-5.71-8 5.71V4.5C4 3.12 5.119 2 6.5 2h4.502v2H6.5z"></path></g>';
@@ -147,6 +149,7 @@ const BuildM3U = function (lines)
         {
             this.addEventListener('readystatechange', function (e)
             {
+
                 if (this.readyState === 4)
                 {
                     let json = JSON.parse(e.target.response);
@@ -155,31 +158,15 @@ const BuildM3U = function (lines)
 
                     if(vidInfo != null && vidInfo.variants != null && vidInfo.variants.length > 1)
                     {
-                        let variants = vidInfo.variants;
-
-                        let lastGoodBitrate = 0;
-                        let baseVariant = variants[0];
-
-                        for(let i = variants.length - 1; i <= 0; i--)
-                        {
-                            let variant = variants[i];
-
-                            if(variant.bitrate != null && (baseVariant.bitrate == null || variant.bitrate > baseVariant.bitrate))
-                            {
-                                baseVariant = variant;
-                                variants[0] = variant;
-                                variants.splice(i, 1);
-                            }
-
-                        }
+                        vidInfo.variants = stripVariants(vidInfo.variants);
 
                         Object.defineProperty(this, 'responseText', { writable: true });
                         this.responseText = JSON.stringify(json);
                     }
                 }
-            })
+            });
         }
-        else if(url.includes('/HomeTimeline') || url.includes('includePromotedContent'))
+        else if(url.includes('/Home') || url.includes('includePromotedContent'))
         {
          //   url = url.replace('Community%22%3Atrue%2C%22withSuperFollowsUserFields%22%3Atrue', 'Community%22%3Afalse%2C%22withSuperFollowsUserFields%22%3Afalse');
         //    url = url.replace('withSuperFollowsTweetFields%22%3Atrue', 'withSuperFollowsTweetFields%22%3Afalse');
@@ -197,12 +184,11 @@ const BuildM3U = function (lines)
             {
                 if (this.readyState === 4)
                 {
-
                     let json = JSON.parse(e.target.response);
 
-                    if(json.data && json.data.home)
+                    if(json.data)
                     {
-                        json.data.home.home_timeline_urt.instructions[0].entries = processTweetsQuery(json.data.home.home_timeline_urt.instructions[0].entries);
+                        processTimelineData(json);
 
                         Object.defineProperty(this, 'responseText', { writable: true });
 
@@ -218,9 +204,187 @@ const BuildM3U = function (lines)
                 }
             })
         }
+   /*     else
+        {
+             this.addEventListener('readystatechange', function (e)
+            {
+                 if (this.readyState === 4)
+                {
+       console.log(e.target.responseText);
+          
+                }
+
+             });
+        }*/
         open.apply(this, arguments);
     };
 })(XMLHttpRequest.prototype.open);
+
+function isTweetBookmarked(id)
+{
+    let tweet = tweets.get(id);
+    if(tweet)
+    {
+        return tweet.bookmarked;
+    }
+    return false;
+}
+
+function stripVariants(variants)
+{
+    variants = variants.filter(variant => variant?.bitrate != null);
+    variants = variants.sort((a, b) => (b.bitrate - a.bitrate));
+    return [variants[0]];
+}
+
+function processResponseMedia(medias)
+{
+    if(medias == null){ return; }
+    for(let i = 0; i < medias.length; i++)
+    {
+        let media = medias[i];
+        if(media.type == 'photo')
+        {
+            media.media_url_https = getHighQualityImage(media.media_url_https);
+        }
+        else if (media.type == 'video')
+        {
+            media.video_info.variants = stripVariants(media.video_info.variants);
+        }
+    }
+}
+
+function Tweet(tweetResult)
+{
+    this.data = tweetResult;
+    if(this.data?.tweet != null){ this.data = this.data.tweet; } //If tweet is limited by who can comment, need to do this
+
+    this.isRetweet = this.data?.legacy?.retweeted_status_result?.result != null;
+    if(this.isRetweet)
+    {
+        this.data = this.data.legacy.retweeted_status_result.result;
+        if(this.data?.tweet) { this.data = this.data.tweet; }
+    }
+    this.media = this.data?.legacy?.extended_entities?.media;
+    this.hasMedia = this.media != null;
+    this.quote = this.data?.quoted_status_result?.result;
+    this.isQuote = this.quote != null;
+    if(this.isQuote) { this.quote = new Tweet(this.quote); }
+    this.quoteHasMedia = this.isQuote && this.quote.hasMedia;
+    this.id = function() { return this.data.legacy.id_str; };
+    this.bookmarked = function() { return this.data?.legacy?.bookmarked ?? false; };
+    this.bookmark = function ()
+    {
+        if(this.data.legacy?.bookmarked != null)
+        {
+            this.data.legacy.bookmarked = true;
+        }
+    };
+    this.unbookmark = function ()
+    {
+        if(this.data.legacy?.bookmarked != null)
+        {
+            this.data.legacy.bookmarked = false;
+        }
+    };
+}
+
+function processTimelineItem(item)
+{
+    let result = item?.tweet_results?.result;
+
+    if(result)
+    {
+        let tweet = new Tweet(result);
+        let id = tweet.id();
+        tweets.set(id, tweet);
+
+        if(tweet.hasMedia)
+        {
+            processResponseMedia(tweet.media);
+        }
+        if(tweet.isRetweet && tweet.quoteHasMedia)
+        {
+            processResponseMedia(tweet.quote.media);
+        }
+    }
+}
+
+function processTimelineEntry(entry)
+{
+    if(entry?.content?.clientEventInfo?.component == "suggest_promoted"){
+        entry.content = {};
+        return;
+    }
+    let items = entry?.content?.items;
+    if(items != null)
+    {
+        for(let i = 0; i < items.length; i++)
+        {
+            processTimelineItem(items[i].item.itemContent);
+        }
+    }
+    else if (entry?.content?.itemContent)
+    {
+        processTimelineItem(entry.content.itemContent);
+    }
+
+}
+
+function processTimelineEntries(entries)
+{
+
+  //  entries.filter(entry => entry.content.clientEventInfo?.component != "suggest_promoted");
+    for(let i = 0; i < entries.length; i++)
+    {
+        processTimelineEntry(entries[i]);
+    }
+}
+
+function processTimelineData(json)
+{
+    let instructions = json?.data?.home?.home_timeline_urt?.instructions;
+    if(instructions == null) { instructions = json.data?.user?.result?.timeline_v2?.timeline?.instructions; }
+    if(instructions == null) { instructions = json.data?.threaded_conversation_with_injections_v2?.instructions; }
+    if(instructions == null) { instructions = json.data?.bookmark_timeline_v2?.timeline?.instructions; }
+    if(instructions == null) { return; }
+
+    for(let inst = 0; inst < instructions.length; inst++)
+    {
+        let instruction = instructions[inst];
+        if(instruction.type == "TimelineAddEntries")
+        {
+            processTimelineEntries(instruction.entries);
+        }
+        else if(instruction.type == "TimelinePinEntry")
+        {
+            processTimelineEntry(instruction.entry); //Pinned tweet
+        }
+    }
+}
+
+
+
+var transactID = "";
+var authy = "";
+(function (setRequestHeader)
+{
+    XMLHttpRequest.prototype.setRequestHeader = function(name, value)
+    {
+        if(name == "X-Client-Transaction-Id")
+        {
+            //console.log(value);
+            transactID = value;
+        }
+        else if(name == "authorization")
+        {
+            authy = value;
+        }
+
+        setRequestHeader.apply(this, arguments);
+    };
+})(XMLHttpRequest.prototype.setRequestHeader);
+
 
 var firstRun = true;
 
@@ -277,9 +441,8 @@ function processTweetsQuery(entries)
 }
 
 
-function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor)
+function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor, onHovering, onNotHovering)
 {
-        //console.log("add dl button");
     let getButtonToDupe = function (btnGrp) { return btnGrp.lastChild.cloneNode(true); };
     let isIframe = false;
     let id = "thd_button_" + name;
@@ -328,54 +491,104 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor)
 
         const oldBGColor = $(bg).css("background-color");
         const oldIconColor = $(iconDiv).css("color");
-        //Emulate Twitter hover color change
-        $(btn).hover(function ()
-                       {
+
+        let hover = function()
+        {
             $(bg).css("background-color", bgColor);
             $(bg).css("border-radius", "20px");
             $(svgElem).css("color", color);
-        }, function ()
-                       {
+          //  onHovering({btn: btn, inIframe: isIframe, svg: svgElem});
+        };
+
+        let unhover = function()
+        {
             $(bg).css("background-color", oldBGColor);
             $(svgElem).css("color", oldIconColor);
-        });
+            if(onNotHovering) onNotHovering(svgElem);
+        };
+
+        let updateColor = function()
+        {
+          if(btn.matches(":hover")) { unhover(); }
+          else { hover(); }
+        };
+
+        //Emulate Twitter hover color change
+        $(btn).hover(() => { hover(); }, () => { unhover(); });
+
+        $(bg).css("background-color", oldBGColor);
+        $(svgElem).css("color", oldIconColor);
+
+
+        return {btn: btn, inIframe: isIframe, svg: svgElem, doHover: hover, doUnhover: unhover, updateCol: updateColor};
     }
 
-    return {btn: btn, inIframe: isIframe};
+    return {btn: btn, inIframe: isIframe, svg: null};
 }
-
 
 async function addBookmarkButton(tweet)
 {
-    const btnCopy = getPostButtonCopy(tweet, "Bookmark", bookmarkSVG, "0 0 24 24", "#B000B5FF", "#B000B520");
-    if(btnCopy == null) { return; }
-
-    let btn = btnCopy.btn;
-    if(btn != null)
+    let id = "";
+    if(tweet.querySelector('div[data-testid="bookmark"]') != null) { return; }
+    let link = tweet.querySelector('div > a[href*="/status/"] > time');
+    if(link)
     {
-        let id = "";
+        link = link.parentElement;
+        id = getIDFromURL(link.href);
+    }
+    else
+    {
+        id = getIDFromTweet(tweet);
+    }
 
-        let link = tweet.querySelector('div > a[href*="/status/"] > time');
-        if(link)
+    let onHoverStopped = function(svgElem, tweetID)
+    {
+         let tweetData = tweets.get(tweetID);
+        if(tweetData && tweetData.bookmarked()) {
+            $(svgElem).css("color", "#1c9bf0FF");
+        }
+    }
+
+    const btnCopy = getPostButtonCopy(tweet, "Bookmark", bookmarkSVG, "0 0 24 24", "#1c9bf0", "#1c9bf01a", (data)=>{}, (svgElem) => {onHoverStopped(svgElem, id);});
+    if(btnCopy == null) { return; }
+    let btn = btnCopy.btn;
+    if(btn == null) { return; }
+
+    onHoverStopped(btnCopy.svg, id);
+
+    $(btn).click(function (e)
+    {
+        e.preventDefault();
+        e.stopPropagation();
+        let tweetData = tweets.get(id);
+
+        if(tweetData == null) { console.log("Couldn't find tweet data for: " + id); return;}
+        if(tweetData.bookmarked())
         {
-            link = link.parentElement;
-            id = getIDFromURL(link.href);
+            unbookmarkPost(id, (resp) =>
+            {
+                if(resp.status < 300)
+                {
+                    tweetData.unbookmark();
+                    btnCopy.updateCol();
+                }
+            });
         }
         else
         {
-            id = getIDFromTweet(tweet);
-        }
-
-        $(btn).click(function (e)
-       {
-                e.preventDefault();
-                e.stopPropagation();
-            bookmarkPost(id);
-            console.log("bookmarked");
+           bookmarkPost(id, (resp) =>
+           {
+                if(resp.status < 300)
+                {
+                    tweetData.bookmark();
+                    btnCopy.updateCol();
+                }
             });
+        }
+    });
 
       //  btn.addEventListener(new MouseEvent('click'), ()=> { });
-    }
+
 }
 
 async function addDownloadButton(tweet, vidUrl, tweetInfo)
@@ -430,7 +643,7 @@ async function updateEmbedMedia(tweet, embed)
 
     getVidURL(tweetInfo.id, vid, poster).then((src) => {
         addCustomCtxMenu(embed, src, tweetInfo, vid);
-     });
+     }, (err) => {});
 }
 
 function waitForImgLoad(img)
@@ -444,11 +657,11 @@ function waitForImgLoad(img)
 
 function updateImgSrc(imgElem, bgElem, src)
 {
-    if (imgElem.src != src)
-    {
-        imgElem.src = src;
-        bgElem.style.backgroundImage = `url("${src}")`;
-    }
+  //  if (imgElem.src != src)
+  //  {
+     //   imgElem.src = src;
+     //   bgElem.style.backgroundImage = `url("${src}")`;
+  //  }
 };
 
 async function updateImageElement(tweetInfo, imgLink, imgCnt)
@@ -456,7 +669,7 @@ async function updateImageElement(tweetInfo, imgLink, imgCnt)
     const imgContainer = await awaitElem(imgLink, 'div[aria-label="Image"], div[data-testid="tweetPhoto"]', argsChildAndSub);
 
     const img = await awaitElem(imgContainer, 'IMG', argsChildAndSub);
-    const hqSrc = getHighQualityImage(img.src);
+    const hqSrc = img.src;
 
     const bg = imgContainer.querySelector('div[style^="background-image"]');
     // LogMessage(imgLink);
@@ -699,31 +912,13 @@ async function replaceVideoElement(tweet, vidElem)
 
     watchPlayButton(vidElem);
 
-    if (vidElem.src.includes('/tweet_video/'))
-    {
-        //      LogMessage(`Is a GIF, used local src! : ${vidElem.src} id: ${tweetInfo.id} url: ${tweetInfo.url} username: ${tweetInfo.username}`);
-        addDownloadButton(tweet, vidElem.src, tweetInfo);
-        return true;
-    }
-
-    const cachedVidUrl = vids.get(tweetInfo.id);
-
-    if (cachedVidUrl)
-    {
-        //    LogMessage(`used cached vid! : ${cachedVidUrl} id: ${tweetInfo.id} url: ${tweetInfo.url} username: ${tweetInfo.username}`);
-        addDownloadButton(tweet, cachedVidUrl, tweetInfo);
-        return true;
-    }
-
     try
     {
-
         const vidUrl = await getVidURL(tweetInfo.id, vidElem, null);
         if (vidUrl != null) //Was able to grab URL using legacy Twitter API and user token
         {
             //    LogMessage(`found vid! : ${vidUrl} id: ${tweetInfo.id} url: ${tweetInfo.url} username: ${tweetInfo.username}`);
             addDownloadButton(tweet, vidUrl, tweetInfo);
-             vids.set(tweetInfo.id, vidUrl);
             return true;
         }
     }
@@ -775,9 +970,10 @@ async function processTweet(tweet, tweetObserver)
 
     if(subElems == 0) { return; }
 
-    let content = await awaitElem(tweetPhotos[0], 'div[aria-label="Image"] img[alt="Image"], video', argsChildAndSub);
+    let content = await awaitElem(tweetPhotos[0], 'video, div[aria-label="Image"] img[alt="Image"]', argsChildAndSub);
   /*
 */
+
     if(isAdvert(tweet)) { return; }
 
     const allLinks = Array.from(tweet.querySelectorAll('a'));
@@ -824,7 +1020,6 @@ async function processTweet(tweet, tweetObserver)
         }
         else
         {
-
             foundContent = true;
             addHasAttribute(tweet, modifiedAttr);
             updateEmbedMedia(tweet, tweetPhotos[embedIndex]);
@@ -1076,60 +1271,53 @@ async function watchForTimeline(primaryColumn, section)
 
 var pageWidthLayoutRule;
 
+async function watchPrimaryColumn(main, primaryColumn)
+{
+    if (addHasAttribute(primaryColumn, modifiedAttr)) { return; }
+
+    //Watch to handle case where timelines are partially lost when clicking on the quoted post name.
+    watchForChange(primaryColumn.firstElementChild, argsChildOnly, () => {
+        awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => {
+            watchForTimeline(primaryColumn, section);
+        });
+    });
+
+    if(pageWidthLayoutRule == null) { pageWidthLayoutRule = getCSSRuleContainingStyle('width', (("." + main.className).replace(' ', ' .')).split(' ')); }
+
+    if(toggleTimelineScaling.enabled)
+    {
+        pageWidthLayoutRule.style.setProperty('width', "100%");
+
+        let primaryColumnGrp = primaryColumn.parentElement.parentElement;
+        let columnClassNames = ("." + primaryColumn.className.replace(" ", " .")).split(' ');
+
+        maxWidthClass = getCSSRuleContainingStyle("max-width", columnClassNames);
+        getUserPref(usePref_MainWidthKey, 600).then((userWidth) => updateLayoutWidth(userWidth, true));
+
+        primaryColumnGrp.addEventListener('mousemove', (e) => { primaryColumnResizer(primaryColumn, e, false, false) });
+        primaryColumnGrp.addEventListener('mousedown', (e) => { primaryColumnResizer(primaryColumn, e, true, false) });
+        window.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
+        document.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
+    }
+
+    //  let section = awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub);
+    awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) =>
+    {
+        LogMessage("region found");
+        watchForTimeline(primaryColumn, section);
+    });
+}
+
 async function onMainChange(main, mutations)
 {
   //  console.log("on main change");
-    awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>
-    {
-        if (addHasAttribute(primaryColumn, modifiedAttr)) { return; }
-
-        //Watch to handle case where timelines are partially lost when clicking on the quoted post name.
-        watchForChange(primaryColumn.firstElementChild, argsChildOnly, () => {
-            awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => {
-               watchForTimeline(primaryColumn, section);
-            });
-        });
-
-        if(pageWidthLayoutRule == null) { pageWidthLayoutRule = getCSSRuleContainingStyle('width', (("." + main.className).replace(' ', ' .')).split(' ')); }
-
-        if(toggleTimelineScaling.enabled)
-        {
-            pageWidthLayoutRule.style.setProperty('width', "100%");
-
-            let primaryColumnGrp = primaryColumn.parentElement.parentElement;
-            let columnClassNames = ("." + primaryColumn.className.replace(" ", " .")).split(' ');
-
-            maxWidthClass = getCSSRuleContainingStyle("max-width", columnClassNames);
-            getUserPref(usePref_MainWidthKey, 600).then((userWidth) => updateLayoutWidth(userWidth, true));
-
-            primaryColumnGrp.addEventListener('mousemove', (e) => { primaryColumnResizer(primaryColumn, e, false, false) });
-            primaryColumnGrp.addEventListener('mousedown', (e) => { primaryColumnResizer(primaryColumn, e, true, false) });
-            window.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
-            document.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
-        }
-
-
-        //  let section = awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub);
-        awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => { LogMessage("region found");
-            watchForTimeline(primaryColumn, section);
-       });
-    });
-    awaitElem(main, 'div[data-testid="sidebarColumn"]', argsChildAndSub).then((sideBar) =>
-    {
-        awaitElem(sideBar, 'section[role="region"] > [role="heading"]', argsChildAndSub).then((sideBarTrending) =>
-        {
-            let veriNag = sideBar.querySelector('aside');
-            if(veriNag != null) { veriNag.parentElement.style.display = "none";}
-            setupTrendingControls(sideBarTrending.parentElement);
-            setupToggles(sideBar);
-            clearTopicsAndInterests();
-        });
-    });
-    if (isOnStatusPage())
+    awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>{ watchPrimaryColumn(main, primaryColumn); });
+    watchSideBar(main);
+  /*  if (isOnStatusPage())
     {
         LogMessage("on status page");
         awaitElem(main, tweetQuery, argsChildAndSub).then((tweet) => { listenForMediaType(tweet.parentElement); });
-    }
+    }*/
 }
 
 //<--> RIGHT SIDEBAR CONTENT <-->//
@@ -1143,8 +1331,20 @@ var toggleClearTopics;
 var toggleTimelineScaling;
 var toggleAnalyticsDisplay;
 
-await loadToggleValues();
-
+async function watchSideBar(main)
+{
+    awaitElem(main, 'div[data-testid="sidebarColumn"]', argsChildAndSub).then((sideBar) =>
+    {
+        awaitElem(sideBar, 'section[role="region"] > [role="heading"]', argsChildAndSub).then((sideBarTrending) =>
+        {
+            let veriNag = sideBar.querySelector('aside');
+            if(veriNag != null) { veriNag.parentElement.style.display = "none";}
+            setupTrendingControls(sideBarTrending.parentElement);
+            setupToggles(sideBar);
+            clearTopicsAndInterests();
+        });
+    });
+}
 
 async function getToggleObj(name)
 {
@@ -1168,7 +1368,6 @@ async function loadToggleValues()
         addGlobalStyle('div[role="group"] > div > a[href$="/analytics"] { display: none !important; }');
     }
 }
-
 
 async function setupToggles(sidePanel)
 {
@@ -1213,7 +1412,6 @@ var blurShowText = "";
 
 async function processBlurButton(tweet)
 {
-
     const getBlurText = function(blur)
     {
         return blur.querySelector('span > span').innerText;
@@ -1231,7 +1429,6 @@ async function processBlurButton(tweet)
             blurBtn.click();
         }
         blurBtn.style.display = toggleNSFW.enabled ? "block" : "none";
-
 
         watchForChange(tweet, {attributes: false, childList: true, subtree: true}, (blurParent, mutes) => {
 
@@ -1357,7 +1554,8 @@ async function updateFullViewImage(img, tweetInfo)
 {
   //  if (addHasAttribute(img, "thd_modified")) { return; }
     let bg = img.parentElement.querySelector('div');
-    let hqSrc = getHighQualityImage(img.src);
+  //  let hqSrc = getHighQualityImage(img.src);
+     let hqSrc = img.src;
     addCustomCtxMenu(img, hqSrc, tweetInfo, img);
     updateImgSrc(img, bg, hqSrc);
     doOnAttributeChange(img, (imgElem) => { updateImgSrc(imgElem, bg, hqSrc); }, false);
@@ -1579,11 +1777,10 @@ function getMediaFormat(url)
 
 function isDirectImagePage(url) //Checks if webpage we're on is a direct image view
 {
-    if (url.includes('/media/') && url.includes('format=') && url.includes('name='))
+    if (url.includes('pbs.twimg.com/media/'))
     {
-        if (!url.includes('name=orig'))
+        if(!url.includes('name=orig'))
         {
-            const hqUrl = getHighQualityImage(url);
             window.location.href = getHighQualityImage(url);
         }
         return true;
@@ -1653,7 +1850,6 @@ async function getTweetInfo(tweet)
 {
     let link = getUrlFromTweet(tweet);
     if (link == null) { return null; }
-    //LogMessage(link);
 
     let url = link.split('?')[0];
     let photoUrl = url.split('/photo/');
@@ -1662,29 +1858,13 @@ async function getTweetInfo(tweet)
 
     let id = urlSplit[1].split('/')[0];
 
-    let subTweet = tweet.querySelector('div[data-testid="tweetPhoto"] div[tabindex]');
-
-    if(subTweet != null && subTweet.getAttribute('tabindex') == "-1")
-    {
-        let subLink = await getLinkFromPoster(id);
-        if(subLink != null)
-        {
-           // console.log(subLink);
-            url = subLink.split('?')[0];
-            photoUrl = url.split('/photo/');
-            url = photoUrl[0];
-            urlSplit = url.split('/status/');
-            id = urlSplit[1].split('/')[0];
-        }
-    }
-
+    let tweetData = tweets.get(id);
     let username = urlSplit[0].split('/').pop();
-    let attributeTo = tweet.querySelector('div[aria-label]');
     let elementIndex = -1;
     if (photoUrl.length > 1) { elementIndex = parseInt(photoUrl[1]);
         LogMessage(url + " : " + photoUrl[1]); }
 
-    return { id: id, url: url, username: username, elemIndex: elementIndex, elem: tweet }
+    return { id: id, url: url, username: username, elemIndex: elementIndex, elem: tweet, data: tweetData }
 }
 
 function filenameFromTweetInfo(tweetInfo)
@@ -1696,7 +1876,29 @@ function filenameFromTweetInfo(tweetInfo)
 
 function getHighQualityImage(url)
 {
+    if(!url.includes("name=")) { return url + (url.includes('?=') ? '&' : '?') + 'name=orig'; }
     return url.replace(/(?<=[\&\?]name=)([A-Za-z0-9])+(?=\&)?/, 'orig');
+}
+
+function getVidFromTweetCache(id, matchID)
+{
+    let tweet = tweets.get(id);
+    if(tweet)
+    {
+        let medias = tweet?.media;
+        if(medias == null) { medias = tweet?.quote?.media; }
+        if(medias != null)
+        {
+            if(matchID == null || medias.length < matchID) { matchID = 0; }
+            let media = medias[matchID];
+            let variants = media?.video_info?.variants;
+            if(variants != null && variants.length > 0)
+            {
+                return variants[0].url;
+            }
+        }
+    }
+    return null;
 }
 
 function tryGetVidLocal(vidElem, id, matchID)
@@ -1713,26 +1915,62 @@ function tryGetVidLocal(vidElem, id, matchID)
             return src;
         }
     }
-
+    let cacheURL = getVidFromTweetCache(id, matchID);
+    if(cacheURL)
+    {
+        return cacheURL;
+    }
     return vids.get(id + ((matchID != null) ? matchID : ""));
 }
 
-const fetchURL = "https://api.twitter.com/1.1/statuses/show.json?skip_status=1&include_entities&cards_platform=Web-12&tweet_mode=extended&trim_user=true&id=";
+const fetchURL = "https://api.twitter.com/1.1/statuses/show.json?skip_status=1&include_entities&tweet_mode=extended&trim_user=true&id=";
 
 function initFetch()
 {
-    let init = {
+     let init = {
             origin: 'https://twitter.com',
             headers:
             {
                 "Accept": '*/*',
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:66.0) Gecko/20100101 Firefox/66.0",
-                "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+                "authorization": authy,
                 "x-csrf-token": cooky,
+                "x-client-transaction-id": transactID,
             },
             credentials: 'include',
             referrer: 'https://twitter.com'
         };
+
+    return init;
+}
+
+function initFetch2()
+{
+    let init = {
+        origin: 'https://twitter.com',
+        headers:
+        {
+            "Accept": '*/*',
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:66.0) Gecko/20100101 Firefox/66.0",
+            "authorization": authy,
+            "content-type": "application/json",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-origin",
+            "x-csrf-token": cooky,
+            "x-client-transaction-id": transactID,
+            "x-twitter-active-user": "yes",
+            "x-twitter-auth-type": "OAuth2Session",
+            "x-twitter-client-language": "en"
+        },
+        referrerPolicy: "strict-origin-when-cross-origin",
+        credentials: 'include',
+        body: null,
+        method: "GET",
+        mode: "cors",
+        referrer: window.location.href
+    };
 
     return init;
 }
@@ -1763,7 +2001,7 @@ async function clearTopicsAndInterests(force = false)
         "headers": {
             "accept": "*/*",
             "accept-language": "en-US,en;q=0.9",
-            "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+            "authorization": authy,
             "sec-fetch-dest": "empty",
             "sec-fetch-mode": "cors",
             "sec-fetch-site": "same-origin",
@@ -1788,7 +2026,7 @@ async function clearTopicsAndInterests(force = false)
                     "headers": {
                         "accept": "*/*",
                         "accept-language": "en-US,en;q=0.9",
-                        "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+                        "authorization": authy,
                         "sec-fetch-dest": "empty",
                         "sec-fetch-mode": "cors",
                         "sec-fetch-site": "same-origin",
@@ -1827,7 +2065,7 @@ async function clearTopicsAndInterests(force = false)
 
                             fetch("https://twitter.com/i/api/1.1/account/personalization/p13n_preferences.json", {
                                 "headers": {
-                                    "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+                                    "authorization": authy,
                                     "content-type": "application/json",
                                     "x-csrf-token": cooky,
                                     "x-twitter-active-user": "yes",
@@ -1853,7 +2091,7 @@ async function clearTopicsAndInterests(force = false)
         "headers": {
             "accept": "*/*",
             "accept-language": "en-US,en;q=0.9",
-            "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+            "authorization": authy,
             "content-type": "application/json",
             "sec-fetch-dest": "empty",
             "sec-fetch-mode": "cors",
@@ -1884,7 +2122,7 @@ async function clearTopicsAndInterests(force = false)
                             "headers": {
                                 "accept": "*/*",
                                 "accept-language": "en-US,en;q=0.9",
-                                "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+                                "authorization": authy,
                                 "content-type": "application/json",
                                 "sec-fetch-dest": "empty",
                                 "sec-fetch-mode": "cors",
@@ -1906,12 +2144,12 @@ async function clearTopicsAndInterests(force = false)
     });
 }
 
-async function bookmarkPost(postId)
+async function bookmarkPost(postId, onResponse)
 {
     fetch("https://api.twitter.com/graphql/aoDbu3RHznuiSkQ9aNM67Q/CreateBookmark", {
         "headers": {
             "accept": "*/*",
-            "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+            "authorization": authy,
             "content-type": "application/json",
             "sec-fetch-dest": "empty",
             "sec-fetch-mode": "cors",
@@ -1921,20 +2159,44 @@ async function bookmarkPost(postId)
             "x-twitter-auth-type": "OAuth2Session",
             "x-twitter-client-language": "en"
         },
-        "referrer": "https://twitter.com/",
+        "referrer": window.location.href,
       //  "referrerPolicy": "strict-origin-when-cross-origin",
         "body": `{"variables":{"tweet_id":"${postId}"},"queryId":"aoDbu3RHznuiSkQ9aNM67Q"}`,
         "method": "POST",
         "mode": "cors",
         "credentials": "include"
-    });
+    }).then((resp) => { onResponse(resp); }).catch((err) => {});
+}
+
+async function unbookmarkPost(postId, onResponse)
+{
+    fetch("https://twitter.com/i/api/graphql/Wlmlj2-xzyS1GN3a6cj-mQ/DeleteBookmark", {
+        "headers": {
+            "accept": "*/*",
+            "authorization": authy,
+            "content-type": "application/json",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-site",
+            "x-csrf-token": cooky,
+            "x-twitter-active-user": "yes",
+            "x-twitter-auth-type": "OAuth2Session",
+            "x-twitter-client-language": "en"
+        },
+        "referrer": window.location.href,
+      //  "referrerPolicy": "strict-origin-when-cross-origin",
+        "body": `{"variables":{"tweet_id":"${postId}"},"queryId":"Wlmlj2-xzyS1GN3a6cj-mQ"}`,
+        "method": "POST",
+        "mode": "cors",
+        "credentials": "include"
+    }).then((resp) => { onResponse(resp); }).catch((err) => {});
 }
 
 function getLinkFromPoster(tweetId)
 {
     return new Promise((resolve, reject) =>
    {
-        var init = initFetch();
+        var init = initFetch2();
 
         try
         {
@@ -1976,13 +2238,48 @@ function getVidURL(id, vidElem, matchId)
 {
     return new Promise((resolve, reject) =>
     {
+        if(vidElem.hasAttribute("thd_modvid")) {reject(null); return; }
+
         let vidSrc = tryGetVidLocal(vidElem, id, matchId);
         if(vidSrc != null) { resolve(vidSrc); return; }
-
-        let init = initFetch();
+/*
+        let init = initFetch2();
+        let fetUrl = `https://twitter.com/i/api/graphql/-Ls3CrSQNo2fRKH6i6Na1A/TweetDetail?variables=%7B%22focalTweetId%22%3A%22${id}%22%2C%22with_rux_injections%22%3Afalse%2C%22includePromotedContent%22%3Afalse%2C%22withCommunity%22%3Afalse%2C%22withQuickPromoteEligibilityTweetFields%22%3Afalse%2C%22withBirdwatchNotes%22%3Afalse%2C%22withVoice%22%3Atrue%2C%22withV2Timeline%22%3Afalse%7D&features=%7B%22rweb_lists_timeline_redesign_enabled%22%3Afalse%2C%22responsive_web_graphql_exclude_directive_enabled%22%3Atrue%2C%22verified_phone_label_enabled%22%3Afalse%2C%22creator_subscriptions_tweet_preview_api_enabled%22%3Afalse%2C%22responsive_web_graphql_timeline_navigation_enabled%22%3Afalse%2C%22responsive_web_graphql_skip_user_profile_image_extensions_enabled%22%3Atrue%2C%22tweetypie_unmention_optimization_enabled%22%3Atrue%2C%22responsive_web_edit_tweet_api_enabled%22%3Atrue%2C%22graphql_is_translatable_rweb_tweet_is_translatable_enabled%22%3Atrue%2C%22view_counts_everywhere_api_enabled%22%3Afalse%2C%22longform_notetweets_consumption_enabled%22%3Atrue%2C%22responsive_web_twitter_article_tweet_consumption_enabled%22%3Afalse%2C%22tweet_awards_web_tipping_enabled%22%3Afalse%2C%22freedom_of_speech_not_reach_fetch_enabled%22%3Afalse%2C%22standardized_nudges_misinfo%22%3Afalse%2C%22tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled%22%3Atrue%2C%22longform_notetweets_rich_text_read_enabled%22%3Afalse%2C%22longform_notetweets_inline_media_enabled%22%3Atrue%2C%22responsive_web_media_download_video_enabled%22%3Afalse%2C%22responsive_web_enhance_cards_enabled%22%3Afalse%7D&fieldToggles=%7B%22withAuxiliaryUserLabels%22%3Afalse%2C%22withArticleRichContentState%22%3Afalse%7D`;
 
         try
         {
+            fetch(fetUrl, init).then((response) =>
+            {
+                if (response.status < 400)
+                {
+                  //  vidElem.setAttribute(modifiedAttr);
+
+                    response.json().then(function (json)
+                    {
+                        console.log(json);
+                        let tweet = json.data.threaded_conversation_with_injections.instructions[0].entries[0].content.itemContent.tweet_results.result;
+                        if (tweet.legacy == null) { tweet = tweet.tweet; }
+
+                        let mediaInfo = tweet.legacy.extended_entities.media[0];
+                        let mp4Variants = mediaInfo.video_info.variants.filter(variant => variant.content_type === 'video/mp4');
+                        mp4Variants = mp4Variants.sort((a, b) => (b.bitrate - a.bitrate));
+                        if(mp4Variants.length)
+                        {
+                            let url = mp4Variants[0].url;
+                            vids.set(id + (matchId != null ? matchId : ""), url);
+                            vidElem.setAttribute("thd_modvid", "");
+                            resolve(url);
+                            return;
+                        }
+                    });
+                }
+                else { reject(null); }
+            }, (err) => { reject(null); return; });
+        }
+        catch (err) {reject(null); return; }
+*/
+       // reject(null);
+            /*
             fetch(fetchURL + id, init).then(function (response)
             {
                 if (response.status == 200)
@@ -2025,10 +2322,9 @@ function getVidURL(id, vidElem, matchId)
                     });
                 }
                 else { resolve(null); }
-            }).catch((err) => { reject({ error: err });
-                resolve(null); });
-        }
-        catch (err) { resolve(null); }
+            }).catch((err) => { console.log(err); console.log(fetchURL + id); console.log(init); reject({ error: err });
+                resolve(null); });*/
+ 
     });
 }
 
@@ -2165,9 +2461,17 @@ function addGlobalStyle(css)
 
 //<--> BEGIN PROCESSING <-->//
 
-async function LoadPrefs()
+/*async function LoadPrefs()
 {
     getUserPref(usePref_blurNSFW, false).then((res) => { toggleNSFW.enabled = res; });
+}*/
+// 2.0
+var tweets = new Map(); //Cache intercepted tweets
+
+async function swapTwitterLogo(reactRoot)
+{
+    let logo = await awaitElem(reactRoot, 'header h1 > a svg', argsChildAndSub);
+    logo.innerHTML = twitSVG;
 }
 
 (async function ()
@@ -2176,7 +2480,7 @@ async function LoadPrefs()
     if (isDirectImagePage(window.location.href)) { return; }
 
     NodeList.prototype.forEach = Array.prototype.forEach;
-    LoadPrefs();
+
     await awaitElem(document, 'BODY', argsChildAndSub);
     let isIframe = document.body.querySelector('div#app');
 
@@ -2186,6 +2490,7 @@ async function LoadPrefs()
         return;
     }
     const reactRoot = await awaitElem(document.body, 'div#react-root', argsChildAndSub);
+    swapTwitterLogo(reactRoot);
     const main = await awaitElem(reactRoot, 'main[role="main"] div', argsChildAndSub);
 
     let layers = reactRoot.querySelector('div#layers');
