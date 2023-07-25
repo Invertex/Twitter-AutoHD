@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.14
+// @version      2.15
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for images that ensures an organized filename.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -2491,8 +2491,12 @@ async function swapTwitterLogo(reactRoot)
 (async function ()
 {
     'use strict';
-    if (isDirectImagePage(window.location.href)) { return; }
 
+    if (isDirectImagePage(window.location.href)) { return; }
+    
+    let shortcutIco = document.head.querySelector('link[rel="shortcut icon"]');
+    shortcutIco.href = shortcutIco.href.replace('twitter.3', 'twitter.2');
+    
     NodeList.prototype.forEach = Array.prototype.forEach;
 
     await awaitElem(document, 'BODY', argsChildAndSub);
