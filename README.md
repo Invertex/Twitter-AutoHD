@@ -1,26 +1,18 @@
 # Twitter AutoHD
--Automatically makes Twitter load the highest resolution of video or image.<br/> 
+- Automatically makes Twitter load the highest resolution of video or image.<br/> 
 >***(even if the image isn't expanded to full view, it will be highest quality, including when saving it)***<br/>
-
--Video Download button on the tweet's control bar.<br/>
-
--Images will layout in full view automatically if possible, or show as much as possible for multi-image layouts.<br/>
-
--Allows click and drag of the right edge of the content feed to shrink/expand it to your liking. (setting will auto-save for you)
-
--Hide post views!
-
--Toggle to collapse the "What's happening?" trending panel.
-
--Bookmark button at the bottom of every post! (instead of hidden in the Share menu)
-
--Custom context menu when right-clicking an image. This ensures a descriptive filename when saving, like this:</br>
+- Video Download button on the tweet's control bar or right-click.<br/>
+- Images will layout in full view automatically if possible, or show as much as possible for multi-image layouts.<br/>
+- Allows click and drag of the right edge of the content feed to shrink/expand it to your liking. (setting will auto-save for you)
+- Hide post views!
+- Toggle to collapse the "What's happening?" trending panel.
+- Globally toggle the NSFW blur
+- Bookmark button at the bottom of every post! (instead of hidden in the Share menu)
+- Custom context menu when right-clicking an image. This ensures a descriptive filename when saving, like this:</br>
 `username - postStatusNum_imgNum.jpg`
-
->This ensures that your saved images always have the name of who posted the content, including the status number which you can use to get the exact tweet it was from.<br/>
->For posts with multiple images, it will also tack on the number that image was in the post.
-
-><b>This should also greatly help with keeping your image folder organized :)</b>
+  >This ensures that your saved images always have the name of who posted the content, including the status number which you can use to get the exact tweet it was from.<br/>
+  >For posts with multiple images, it will also tack on the number that image was in the post.<br/>
+  ><b>This should also greatly help with keeping your image folders organized :)</b>
 
 # Installation
 To install Twitter AutoHD you need a User Script manager installed in your browser. There are plenty of options such as [Tamper Monkey](https://www.tampermonkey.net/) or [Violent Monkey](https://github.com/violentmonkey/violentmonkey). Install these to the browser of your choice.
