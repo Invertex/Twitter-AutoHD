@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.19
+// @version      2.20
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -180,7 +180,7 @@ var authy = "";
 
                     if(vidInfo != null && vidInfo.variants != null && vidInfo.variants.length > 1)
                     {
-                        vidInfo.variants = stripVariants(vidInfo.variants);
+                        vidInfo.variants = [stripVariants(vidInfo.variants)];
 
                         Object.defineProperty(this, 'responseText', { writable: true });
                         this.responseText = JSON.stringify(json);
@@ -255,9 +255,10 @@ function isTweetBookmarked(id)
 
 function stripVariants(variants)
 {
+    if(variants == null) { return null; }
     variants = variants.filter(variant => variant?.bitrate != null);
     variants = variants.sort((a, b) => (b.bitrate - a.bitrate));
-    return [variants[0]];
+    return variants[0];
 }
 
 function Tweet(tweetResult)
@@ -311,7 +312,7 @@ function Tweet(tweetResult)
         if(urlParts.length < 4) { return null; }
         let counter = this.media.length < 2 ? -1 : index + 1;
         let srcURL = mediaItem.media_url_https;
-        let contentURL = mediaItem?.video_info?.variants[0]?.url ?? srcURL;
+        let contentURL = stripVariants(mediaItem?.video_info?.variants)?.url ?? srcURL;
 
         return {
             username: urlParts[0],
@@ -358,11 +359,10 @@ function processResponseMedia(medias)
         {
             media.media_url_https = getHighQualityImage(media.media_url_https);
         }
-        else if (media.type == 'video')
+      /*  else if (media.type == 'video')
         {
-            media.video_info.variants = stripVariants(media.video_info.variants);
-        }
-
+            media.video_info.variants = [stripVariants(media.video_info.variants)];
+        }*/
     }
 }
 
@@ -649,6 +649,10 @@ function addBookmarkButton(tweetData)
 
 async function addDownloadButton(tweetData, mediaInfo)
 {
+    for(let i = mediaInfo.data.mediaNum - 2; i > 0; i--)
+    {
+        if(tweetData.media[i].type == 'video') { return; }
+    }
     let vidUrl = mediaInfo.data.contentURL;
     const btnCopy = getPostButtonCopy(tweetData.tweetElem, "Download", dlSVG, "-80 -80 160 160", "#f3d607FF", "#f3d60720");
     if(btnCopy == null) { return; }
@@ -1218,10 +1222,9 @@ function hideForYou(primaryColumn)
     let mainTabs = primaryColumn.querySelector('div[role="tablist"]');
     if(mainTabs)
     {
-        let tabs = mainTabs.querySelectorAll('a[href="/home"]');
-        if(tabs.length == 2)
+        let tabs = mainTabs.querySelectorAll('div[role="presentation"]');
+        if(tabs.length > 1)
         {
-
             tabs[0].style.display = 'none';
             tabs[1].click();
         }
@@ -1247,7 +1250,8 @@ async function watchSideBar(main)
         awaitElem(sideBar, 'section[role="region"] > [role="heading"]', argsChildAndSub).then((sideBarTrending) =>
         {
             let veriNag = sideBar.querySelector('aside');
-            if(veriNag != null) { veriNag.parentElement.style.display = "none";}
+            awaitElem(sideBar, 'aside').then((nag) => { nag.remove();});
+    
             setupTrendingControls(sideBarTrending.parentElement);
             setupToggles(sideBar);
             clearTopicsAndInterests();
@@ -1479,10 +1483,13 @@ async function updateFullViewImage(ctxTarget, tweetData, mediaData)
     let hqSrc = mediaData.contentURL;
     let mediaInfo = { data: mediaData, linkElem: ctxTarget, mediaElem: ctxTarget };
    //  let hqSrc = img.src;
-    updateImgSrc(ctxTarget, bg, hqSrc);
+    
     addCustomCtxMenu(tweetData, mediaInfo, ctxTarget);
-
-    doOnAttributeChange(ctxTarget, (ctxTarg) => { updateImgSrc(ctxTarg, bg, hqSrc); }, false);
+    if(mediaData.type == 'photo')
+    {
+        updateImgSrc(ctxTarget, bg, hqSrc);
+        doOnAttributeChange(ctxTarget, (ctxTarg) => { updateImgSrc(ctxTarg, bg, hqSrc); }, false);
+    }
 }
 
 //<--> RIGHT-CLICK CONTEXT MENU STUFF START <-->//
