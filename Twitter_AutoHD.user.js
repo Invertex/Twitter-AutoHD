@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.18
+// @version      2.19
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -64,7 +64,7 @@ const usePref_toggleClearTopics = "thd_toggleClearTopics";
 const usePref_lastTopicsClearTime = "thd_lastTopicsClearTime";
 const usePref_toggleTimelineScaling = "thd_toggleTimelineScaling";
 const usePref_toggleAnalyticsDisplay = "thd_toggleAnalyticsDisplay";
-
+const usePref_toggleDisableForYou = "thd_toggleDisableForYou";
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
@@ -200,7 +200,7 @@ var authy = "";
             url = url.replace('reach_fetch_enabled%22%3Atrue', 'reach_fetch_enabled%22%3Afalse');
             url = url.replace('withQuickPromoteEligibilityTweetFields%22%3Atrue', 'withQuickPromoteEligibilityTweetFields%22%3Afalse');
             url = url.replace('article_tweet_consumption_enabled%22%3Atrue', 'article_tweet_consumption_enabled%22%3Afalse');
-            url = url.replace('count%22%3A20', 'count%22%3A50');
+            url = url.replace('count%22%3A20', 'count%22%3A40');
 
             this.addEventListener('readystatechange', function (e)
             {
@@ -210,7 +210,7 @@ var authy = "";
 
                     if(json.data)
                     {
-                    //    console.log(json);
+            //            console.log(json);
                         processTimelineData(json);
 
                         Object.defineProperty(this, 'responseText', { writable: true });
@@ -227,18 +227,18 @@ var authy = "";
                 }
             })
         }
-   /*     else
+        else if(url.includes('guide.json')) //Explore
         {
              this.addEventListener('readystatechange', function (e)
             {
                  if (this.readyState === 4)
                 {
-       console.log(e.target.responseText);
-
+                     let json = JSON.parse(e.target.response);
+                    processExploreData(json?.globalObjects?.tweets);
                 }
 
              });
-        }*/
+        }
         open.apply(this, arguments);
     };
 })(XMLHttpRequest.prototype.open);
@@ -271,32 +271,33 @@ function Tweet(tweetResult)
         this.data = this.data.legacy.retweeted_status_result.result;
         if(this.data?.tweet) { this.data = this.data.tweet; }
     }
-    this.media = this.data?.legacy?.extended_entities?.media;
-    this.mediaBasic = this.data?.legacy?.entities?.media;
+    this.legacy = this.data?.legacy ?? this.data; //Swapping to handle odd Explore page data
+    this.media = this.legacy?.extended_entities?.media;
+    this.mediaBasic = this.legacy?.entities?.media;
     this.hasMedia = this.media != null;
 
     this.quote = this.data?.quoted_status_result?.result;
     this.isQuote = this.quote != null;
     if(this.isQuote) { this.quote = new Tweet(this.quote); }
     this.quoteHasMedia = this.isQuote && this.quote.hasMedia;
-    this.id = this.data.rest_id;
+    this.id = this.data?.rest_id ?? this.data?.conversation_id;
     this.username = this.data?.core?.user_results?.result.legacy?.screen_name;
     this.url = "https://twitter.com/" + this.username + "/" + this.id;
     this.tweetElem = null;
 
-    this.bookmarked = function() { return this.data.legacy?.bookmarked ?? false; };
+    this.bookmarked = function() { return this?.legacy?.bookmarked ?? false; };
     this.bookmark = function ()
     {
-        if(this.data.legacy?.bookmarked != null)
+        if(this.legacy?.bookmarked != null)
         {
-            this.data.legacy.bookmarked = true;
+            this.legacy.bookmarked = true;
         }
     };
     this.unbookmark = function ()
     {
-        if(this.data.legacy?.bookmarked != null)
+        if(this.legacy?.bookmarked != null)
         {
-            this.data.legacy.bookmarked = false;
+            this.legacy.bookmarked = false;
         }
     };
     this.getMediaData = function(index)
@@ -323,6 +324,27 @@ function Tweet(tweetResult)
             height: mediaItem.original_info.height
         };
     };
+}
+
+function processExploreData(exploreTweets)
+{
+    for(let i = 0; i < exploreTweets.length; i++)
+    {
+        let exploreTweet = exploreTweets[i];
+        let tweet = new Tweet(exploreTweet);
+        tweets.set(tweet.id, tweet);
+
+        if(tweet.hasMedia)
+        {
+            processResponseMedia(tweet.media);
+            processResponseMedia(tweet.mediaBasic);
+        }
+        if(tweet.isQuote && tweet.quoteHasMedia)
+        {
+            processResponseMedia(tweet.quote.media);
+            processResponseMedia(tweet.quote.mediaBasic);
+        }
+    }
 }
 
 function processResponseMedia(medias)
@@ -725,7 +747,7 @@ function updateContentElement(tweetData, mediaInfo, elemIndex, elemCnt)
         updateImgSrc(mediaElem, bg, mediaInfo.data.contentURL);
     }
 
-    addCustomCtxMenu(tweetData, mediaInfo, mediaInfo.linkElem); 
+    addCustomCtxMenu(tweetData, mediaInfo, mediaInfo.linkElem);
 //    mediaElem.setAttribute(modifiedAttr, "");
 
     updateElemPadding(elemCnt, bg, tweetPhoto);
@@ -1079,7 +1101,7 @@ async function onTimelineContainerChange(container, mutations)
 
 function onTimelineChange(addedNodes)
 {
-    //LogMessage("on timeline change");
+    LogMessage("on timeline change");
     if (addedNodes.length == 0) { LogMessage("no added nodes"); return; }
     addedNodes.forEach((child) =>
     {
@@ -1132,9 +1154,21 @@ async function watchForTimeline(primaryColumn, section)
 
 var pageWidthLayoutRule;
 
+
 async function watchPrimaryColumn(main, primaryColumn)
 {
+    if(primaryColumn == null) { return; }
     if (addHasAttribute(primaryColumn, modifiedAttr)) { return; }
+
+    awaitElem(primaryColumn, 'nav', argsChildAndSub).then((nav) =>
+    {
+        let navCont = nav.parentElement;
+        watchForChange(navCont, argsChildOnly, () => {
+                watchForTimeline(primaryColumn, navCont);
+            });
+    });
+
+    hideForYou(primaryColumn);
 
     //Watch to handle case where timelines are partially lost when clicking on the quoted post name.
     watchForChange(primaryColumn.firstElementChild, argsChildOnly, () => {
@@ -1142,6 +1176,7 @@ async function watchPrimaryColumn(main, primaryColumn)
             watchForTimeline(primaryColumn, section);
         });
     });
+
 
     if(pageWidthLayoutRule == null) { pageWidthLayoutRule = getCSSRuleContainingStyle('width', (("." + main.className).replace(' ', ' .')).split(' ')); }
 
@@ -1167,12 +1202,30 @@ async function watchPrimaryColumn(main, primaryColumn)
         LogMessage("region found");
         watchForTimeline(primaryColumn, section);
     });
+
 }
 
 async function onMainChange(main, mutations)
 {
     awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>{ watchPrimaryColumn(main, primaryColumn); });
     watchSideBar(main);
+}
+
+function hideForYou(primaryColumn)
+{
+    if(!toggleDisableForYou.enabled) { return; }
+
+    let mainTabs = primaryColumn.querySelector('div[role="tablist"]');
+    if(mainTabs)
+    {
+        let tabs = mainTabs.querySelectorAll('a[href="/home"]');
+        if(tabs.length == 2)
+        {
+
+            tabs[0].style.display = 'none';
+            tabs[1].click();
+        }
+    }
 }
 
 //<--> RIGHT SIDEBAR CONTENT <-->//
@@ -1185,6 +1238,7 @@ var toggleTopics;
 var toggleClearTopics;
 var toggleTimelineScaling;
 var toggleAnalyticsDisplay;
+var toggleDisableForYou;
 
 async function watchSideBar(main)
 {
@@ -1201,22 +1255,24 @@ async function watchSideBar(main)
     });
 }
 
-async function getToggleObj(name)
+async function getToggleObj(name, defaultVal)
 {
-    return {enabled: true, elem: null, name: name, onChanged: new EventTarget(), listen: function(func) { this.onChanged.addEventListener(this.name, func); }};
+    let enable = await getUserPref(name, defaultVal);
+    return {enabled: enable, elem: null, name: name, onChanged: new EventTarget(), listen: function(func) { this.onChanged.addEventListener(this.name, func); }};
 }
 
 async function loadToggleValues()
 {
-    toggleNSFW = await getToggleObj(usePref_blurNSFW);
-    toggleHQImg = await getToggleObj(usePref_toggleHQImg);
-    toggleLiked = await getToggleObj(usePref_toggleLiked);
-    toggleFollowed = await getToggleObj(usePref_toggleFollowed);
-    toggleRetweet = await getToggleObj(usePref_toggleRetweet);
-    toggleTopics = await getToggleObj(usePref_toggleTopics);
-    toggleClearTopics = await getToggleObj(usePref_toggleClearTopics);
-    toggleTimelineScaling = await getToggleObj(usePref_toggleTimelineScaling);
-    toggleAnalyticsDisplay = await getToggleObj(usePref_toggleAnalyticsDisplay);
+    toggleNSFW = await getToggleObj(usePref_blurNSFW, false);
+    toggleHQImg = await getToggleObj(usePref_toggleHQImg, true);
+    toggleLiked = await getToggleObj(usePref_toggleLiked, true);
+    toggleFollowed = await getToggleObj(usePref_toggleFollowed, false);
+    toggleRetweet = await getToggleObj(usePref_toggleRetweet, false);
+    toggleTopics = await getToggleObj(usePref_toggleTopics, false);
+    toggleClearTopics = await getToggleObj(usePref_toggleClearTopics, false);
+    toggleTimelineScaling = await getToggleObj(usePref_toggleTimelineScaling, true);
+    toggleAnalyticsDisplay = await getToggleObj(usePref_toggleAnalyticsDisplay, false);
+    toggleDisableForYou = await getToggleObj(usePref_toggleDisableForYou, false);
 
     if(!toggleAnalyticsDisplay.enabled)
     {
@@ -1226,20 +1282,20 @@ async function loadToggleValues()
 
 async function setupToggles(sidePanel)
 {
-    createToggleOption(sidePanel, toggleNSFW, false, "NSFW Blur ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleHQImg, true, "HQ Image Loading ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleLiked, true, "Liked Tweets ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleFollowed, false, "Followed By Tweets ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleRetweet, false, "Retweets ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleTopics, false, "Topic Tweets ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleClearTopics, false, "Interests/Topics Prefs AutoClear ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleTimelineScaling, true, "Timeline Width Scaling ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleAnalyticsDisplay, false, "Show Post Views ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleNSFW, "NSFW Blur ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleHQImg, "HQ Image Loading ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleLiked, "Liked Tweets ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleFollowed, "Followed By Tweets ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleRetweet, "Retweets ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleTopics, "Topic Tweets ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleClearTopics, "Interests/Topics Prefs AutoClear ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleTimelineScaling, "Timeline Width Scaling ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleAnalyticsDisplay, "Show Post Views ", "ON", "OFF");
+    await createToggleOption(sidePanel, toggleDisableForYou, 'Disable "For You" page ', "ON", "OFF");
 }
 
-async function createToggleOption(sidePanel, toggleState, defaultValue, toggleText, toggleOnText, toggleOffText)
+async function createToggleOption(sidePanel, toggleState, toggleText, toggleOnText, toggleOffText)
 {
-    toggleState.enabled = await getUserPref(toggleState.name, defaultValue);
     toggleState.elem = sidePanel.querySelector('#' + toggleState.name);
     toggleOnText = toggleText + toggleOnText;
     toggleOffText = toggleText + toggleOffText;
@@ -1377,6 +1433,7 @@ async function onLayersChange(layers, mutation)
 
     if (mutation.addedNodes != null && mutation.addedNodes.length > 0)
     {
+
         const contentContainer = Array.from(mutation.addedNodes)[0];
         const dialog = await awaitElem(contentContainer, 'div[role="dialog"]', argsChildAndSub);
 
@@ -1747,6 +1804,7 @@ function getTweetData(tweet)
     if (id == null) { return null; }
 
     let tweetData = tweets.get(id);
+    if(tweetData == null) { return null; }
     tweetData.tweetElem = tweet;
 
     return tweetData;
@@ -2027,7 +2085,9 @@ async function awaitElem(root, query, obsArguments)
     return new Promise((resolve, reject) =>
     {
         if (findElem(root, query, null, resolve)) { return; }
-        const rootObserver = new MutationObserver((mutes, obs) => { if(findElem(root, query, obs, resolve)) { rootObserver.disconnect();} });
+        const rootObserver = new MutationObserver((mutes, obs) => {
+            findElem(root, query, obs, resolve);
+        });
         rootObserver.observe(root, obsArguments);
     });
 }
@@ -2143,7 +2203,7 @@ async function swapTwitterLogo(reactRoot)
 
     let shortcutIco = document.head.querySelector('link[rel="shortcut icon"]');
     shortcutIco.href = shortcutIco.href.replace('twitter.3', 'twitter.2');
-
+    let prefsLoading = loadToggleValues();
     NodeList.prototype.forEach = Array.prototype.forEach;
 
     await awaitElem(document, 'BODY', argsChildAndSub);
@@ -2160,7 +2220,7 @@ async function swapTwitterLogo(reactRoot)
     const reactRoot = await awaitElem(document.body, 'div#react-root', argsChildAndSub);
     swapTwitterLogo(reactRoot);
     const main = await awaitElem(reactRoot, 'main[role="main"] div', argsChildAndSub);
-
+    await prefsLoading;
     let layers = reactRoot.querySelector('div#layers');
 
     awaitElem(reactRoot, 'div#layers', argsChildAndSub).then((layers) =>
@@ -2169,7 +2229,7 @@ async function swapTwitterLogo(reactRoot)
     });
 
     addHasAttribute(main, modifiedAttr);
-    await loadToggleValues();
+
     onMainChange(main);
     watchForChange(main, argsChildOnly, onMainChange);
 })();
