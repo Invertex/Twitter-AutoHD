@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.20
+// @version      2.22
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -34,6 +34,8 @@ var tweets = new Map(); //Cache intercepted tweets data
 const argsChildAndSub = { attributes: false, childList: true, subtree: true };
 const argsChildOnly = { attributes: false, childList: true, subtree: false };
 const argsChildAndAttr = { attributes: true, childList: true, subtree: false };
+const argsAll = { attributes: true, childList: true, subtree: true };
+const argsAttrOnly = { attributes: true, childList: false, subtree: false };
 
 const dlSVG = '<g><path d="M 8 51 C 5 54 5 48 5 42 L 5 -40 C 5 -45 -5 -45 -5 -40 V 42 C -5 48 -5 54 -8 51 L -48 15 C -51 12 -61 17 -56 22 L -12 61 C 0 71 0 71 12 61 L 56 22 C 61 17 52 11 48 15 Z"></path>' +
     '<path d="M 56 -58 C 62 -58 62 -68 56 -68 H -56 C -62 -68 -62 -58 -56 -58 Z"></path></g>';
@@ -2049,13 +2051,24 @@ async function unbookmarkPost(postId, onResponse)
 }
 
 //<--> GENERIC UTILITY FUNCTIONS <-->//
-async function watchForChange(root, obsArguments, onChange)
+function watchForChange(root, obsArguments, onChange)
 {
     const rootObserver = new MutationObserver(function (mutations)
     {
         mutations.forEach((mutation) => onChange(root, mutation));
     });
     rootObserver.observe(root, obsArguments);
+    return rootObserver;
+}
+
+function watchForChangeFull(root, obsArguments, onChange)
+{
+    const rootObserver = new MutationObserver(function (mutations)
+    {
+        onChange(root, mutations);
+    });
+    rootObserver.observe(root, obsArguments);
+    return rootObserver;
 }
 
 async function watchForAddedNodes(root, stopAfterFirstMutation, obsArguments, executeAfter)
@@ -2189,8 +2202,62 @@ function addGlobalStyle(css)
 }*/
 // 2.0
 
+function ObserveObj(observerConstraints, observeBehaviour, asyncGetElemBehaviour)
+{
+    this.elem = null;
+    this.observer = null;
 
-async function swapTwitterLogo(reactRoot)
+    this.updateObserver = async function()
+    {
+        if(this.elem == null)
+        {
+            this.elem = await asyncGetElemBehaviour();
+            console.log(this.elem);
+            observeBehaviour(this.elem, null);
+
+            if(this.observer == null)
+            {
+                this.observer = watchForChangeFull(this.elem, observerConstraints, (elem, mutes) => {
+                    this.observer?.disconnect();
+                    observeBehaviour(elem, mutes)
+                    this.observer?.observe(elem, observerConstraints);
+                });
+            }
+            else { this.observer?.observe(this.elem, observerConstraints); }
+        }
+    };
+
+    this.updateObserver();
+}
+
+function HeaderData(header)
+{
+    this.xLabel = '/ X';
+    this.title = new ObserveObj(
+        argsChildOnly,
+        (title, mutes) => { if(title && title.innerText.endsWith(this.xLabel)) { title.innerText = title.innerText.replace(this.xLabel, ''); }},
+           function() { return awaitElem(document.head, 'title', argsChildOnly); });
+
+    this.meta = new ObserveObj(argsAll, (meta, mutes) => {
+        if(meta && meta.content.endsWith(this.xLabel)) { meta.content = meta.content.replace(this.xLabel, ''); }
+    }, function() { return awaitElem(document.head, 'meta[content$="/ X"]', argsChildOnly); });
+
+    this.shortcutIco = new ObserveObj(argsAttrOnly, (shortcutIco, mutes) => {
+        if(shortcutIco) { shortcutIco.href = shortcutIco.href.replace('twitter.3', 'twitter.2'); }
+    }, function() { return awaitElem(document.head, 'link[rel="shortcut icon"]', argsChildOnly); });
+
+    this.checkObservers = function()
+    {
+        this.title.updateObserver();
+        this.meta.updateObserver();
+        this.shortcutIco.updateObserver();
+    };
+}
+
+var headerData = new HeaderData(document.head);
+watchForChangeFull(document.head, argsChildOnly, () => headerData.checkObservers());
+
+async function swapTwitterSplashLogo(reactRoot)
 {
     let placeholder = reactRoot.querySelector('div#placeholder svg');
     if(placeholder != null)
@@ -2208,12 +2275,11 @@ async function swapTwitterLogo(reactRoot)
 
     if (isDirectImagePage(window.location.href)) { return; }
 
-    let shortcutIco = document.head.querySelector('link[rel="shortcut icon"]');
-    shortcutIco.href = shortcutIco.href.replace('twitter.3', 'twitter.2');
     let prefsLoading = loadToggleValues();
     NodeList.prototype.forEach = Array.prototype.forEach;
 
     await awaitElem(document, 'BODY', argsChildAndSub);
+
     preCursor = document.body.style.cursor;
     initializeCtxMenu();
 
@@ -2225,7 +2291,7 @@ async function swapTwitterLogo(reactRoot)
         return;
     }
     const reactRoot = await awaitElem(document.body, 'div#react-root', argsChildAndSub);
-    swapTwitterLogo(reactRoot);
+    swapTwitterSplashLogo(reactRoot);
     const main = await awaitElem(reactRoot, 'main[role="main"] div', argsChildAndSub);
     await prefsLoading;
     let layers = reactRoot.querySelector('div#layers');
