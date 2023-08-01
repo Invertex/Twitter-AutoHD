@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.22
+// @version      2.23
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -152,6 +152,7 @@ var authy = "";
 {
     XMLHttpRequest.prototype.open = function (method, url)
     {
+
         if (url.includes('video.twimg.com') && url.includes('.m3u8?'))
         {
             this.addEventListener('readystatechange', function (e)
@@ -177,7 +178,6 @@ var authy = "";
                 if (this.readyState === 4)
                 {
                     let json = JSON.parse(e.target.response);
-
                     let vidInfo = json.extended_entities?.media?.video_info ?? null;
 
                     if(vidInfo != null && vidInfo.variants != null && vidInfo.variants.length > 1)
@@ -192,17 +192,12 @@ var authy = "";
         }
         else if(url.includes('/Home') || url.includes('includePromotedContent'))
         {
-         //   url = url.replace('Community%22%3Atrue%2C%22withSuperFollowsUserFields%22%3Atrue', 'Community%22%3Afalse%2C%22withSuperFollowsUserFields%22%3Afalse');
-        //    url = url.replace('withSuperFollowsTweetFields%22%3Atrue', 'withSuperFollowsTweetFields%22%3Afalse');
-         //   url = url.replace('latestControlAvailable%22%3Atrue', 'latestControlAvailable%22%3Afalse');
-         //   url = url.replace('vibe_api_enabled%22%3Atrue', 'vibe_api_enabled%22%3Afalse');
-        //    url = url.replace('withDownvotePerspective%22%3Afalse', 'withDownvotePerspective%22%3Atrue');
             url = url.replace('includePromotedContent%22%3Atrue', 'includePromotedContent%22%3Afalse');
             url = url.replace('phone_label_enabled%22%3Afalse', 'phone_label_enabled%22%3Atrue');
             url = url.replace('reach_fetch_enabled%22%3Atrue', 'reach_fetch_enabled%22%3Afalse');
             url = url.replace('withQuickPromoteEligibilityTweetFields%22%3Atrue', 'withQuickPromoteEligibilityTweetFields%22%3Afalse');
             url = url.replace('article_tweet_consumption_enabled%22%3Atrue', 'article_tweet_consumption_enabled%22%3Afalse');
-            url = url.replace('count%22%3A20', 'count%22%3A40');
+            url = url.replace('count%22%3A20', 'count%22%3A30');
 
             this.addEventListener('readystatechange', function (e)
             {
@@ -212,7 +207,7 @@ var authy = "";
 
                     if(json.data)
                     {
-            //            console.log(json);
+
                         processTimelineData(json);
 
                         Object.defineProperty(this, 'responseText', { writable: true });
@@ -241,6 +236,7 @@ var authy = "";
 
              });
         }
+
         open.apply(this, arguments);
     };
 })(XMLHttpRequest.prototype.open);
@@ -840,20 +836,34 @@ function updateContentLayout(tweetData, mediaElems)
         }
     }
 
-    const padder = tweetData.tweetElem.querySelector('div[id^="id_"] div[style^="padding-bottom"]');
-    if(padder != null)
+    const updatePadder = function()
     {
-        const flexer = padder.closest('div[id^="id_"] > div');
-        const bg = flexer.querySelector('div[style^="background"] > div');
+        const padder = tweetData.tweetElem.querySelector('div[id^="id_"] div[style^="padding-bottom"]');
 
-        padder.parentElement.style = "";
-        padder.style = `padding-bottom: ${ratio}%;`;
-        const modPaddingAttr = "modifiedPadding";
-        padder.setAttribute(modPaddingAttr, "");
-        padder.parentElement.setAttribute(modPaddingAttr, "");
-        flexer.style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
-        if(bg) { bg.style.width = "100%"; }
+        if(padder != null && padder.getAttribute("modifiedPadding") == null)
+        {
+            const modPaddingAttr = "modifiedPadding";
+            const padderParent = padder.parentElement;
+            const flexer = padder.closest('div[id^="id_"] > div');
+            const bg = flexer.querySelector('div[style^="background"] > div');
+
+            padderParent.style = "";
+            padder.style = `padding-bottom: ${ratio}%;`;
+            padder.setAttribute(modPaddingAttr, "");
+            padderParent.setAttribute(modPaddingAttr, "");
+            flexer.style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
+            if(bg) { bg.style.width = "100%"; }
+
+            doOnAttributeChange(padder, (padderElem) => { if(padderElem.getAttribute("modifiedPadding") == null) { padderElem.style = "padding-bottom: " + (ratio) + "%;";} })
+            if(padderParent.getAttribute("modifiedPadding") == null)
+            {
+                doOnAttributeChange(padderParent, (padderParentElem) => { if(padderParentElem.getAttribute("modifiedPadding") == null) { padderParentElem.style = "";} })
+            }
+        }
     }
+    updatePadder();
+    watchForChange(tweetData.tweetElem, argsChildAndSub, (tweet, mutes) => { updatePadder(); });
+
 
  /*   for (let i = 0; i < elemCnt; i++)
     {
@@ -869,11 +879,11 @@ function updateContentLayout(tweetData, mediaElems)
         edgeCase.style.setProperty('align-self', "inherit");
     }
 
-    if(padder != null)
-    {
-        doOnAttributeChange(padder, (padderElem) => { if(padderElem.getAttribute("modifiedPadding") == null) { padderElem.style = "padding-bottom: " + (ratio) + "%;";} })
-        doOnAttributeChange(padder.parentElement, (padderParentElem) => { if(padderParentElem.getAttribute("modifiedPadding") == null) { padderParentElem.style = "";} })
-    }
+//    if(padder != null)
+//    {
+ //       doOnAttributeChange(padder, (padderElem) => { if(padderElem.getAttribute("modifiedPadding") == null) { padderElem.style = "padding-bottom: " + (ratio) + "%;";} })
+ //       doOnAttributeChange(padder.parentElement, (padderParentElem) => { if(padderParentElem.getAttribute("modifiedPadding") == null) { padderParentElem.style = "";} })
+ //   }
 }
 
 
@@ -1253,7 +1263,7 @@ async function watchSideBar(main)
         {
             let veriNag = sideBar.querySelector('aside');
             awaitElem(sideBar, 'aside').then((nag) => { nag.remove();});
-    
+
             setupTrendingControls(sideBarTrending.parentElement);
             setupToggles(sideBar);
             clearTopicsAndInterests();
@@ -1485,7 +1495,7 @@ async function updateFullViewImage(ctxTarget, tweetData, mediaData)
     let hqSrc = mediaData.contentURL;
     let mediaInfo = { data: mediaData, linkElem: ctxTarget, mediaElem: ctxTarget };
    //  let hqSrc = img.src;
-    
+
     addCustomCtxMenu(tweetData, mediaInfo, ctxTarget);
     if(mediaData.type == 'photo')
     {
@@ -2065,7 +2075,9 @@ function watchForChangeFull(root, obsArguments, onChange)
 {
     const rootObserver = new MutationObserver(function (mutations)
     {
+        rootObserver.disconnect();
         onChange(root, mutations);
+        rootObserver.observe(root, obsArguments);
     });
     rootObserver.observe(root, obsArguments);
     return rootObserver;
@@ -2212,15 +2224,13 @@ function ObserveObj(observerConstraints, observeBehaviour, asyncGetElemBehaviour
         if(this.elem == null)
         {
             this.elem = await asyncGetElemBehaviour();
-            console.log(this.elem);
+
             observeBehaviour(this.elem, null);
 
             if(this.observer == null)
             {
                 this.observer = watchForChangeFull(this.elem, observerConstraints, (elem, mutes) => {
-                    this.observer?.disconnect();
                     observeBehaviour(elem, mutes)
-                    this.observer?.observe(elem, observerConstraints);
                 });
             }
             else { this.observer?.observe(this.elem, observerConstraints); }
