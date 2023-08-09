@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.23
+// @version      2.24
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -207,7 +207,6 @@ var authy = "";
 
                     if(json.data)
                     {
-
                         processTimelineData(json);
 
                         Object.defineProperty(this, 'responseText', { writable: true });
@@ -319,6 +318,7 @@ function Tweet(tweetResult)
             srcURL: srcURL,
             contentURL: contentURL,
             type: mediaItem.type,
+            isVideo: mediaItem.type == 'video' || srcURL.includes('/tweet_video_thumb/'),
             width: mediaItem.original_info.width,
             height: mediaItem.original_info.height
         };
@@ -649,7 +649,7 @@ async function addDownloadButton(tweetData, mediaInfo)
 {
     for(let i = mediaInfo.data.mediaNum - 2; i > 0; i--)
     {
-        if(tweetData.media[i].type == 'video') { return; }
+        if(tweetData.media[i].isVideo) { return; }
     }
     let vidUrl = mediaInfo.data.contentURL;
     const btnCopy = getPostButtonCopy(tweetData.tweetElem, "Download", dlSVG, "-80 -80 160 160", "#f3d607FF", "#f3d60720");
@@ -730,7 +730,7 @@ function updateContentElement(tweetData, mediaInfo, elemIndex, elemCnt)
     let mediaElem = mediaInfo.mediaElem;
     let tweetPhoto = mediaElem.closest('div[data-testid="tweetPhoto"]');
     const flexDir = $(tweetPhoto).css('flex-direction');
-    const isVideo = mediaInfo.data.type == 'video';
+    const isVideo = mediaInfo.data.isVideo;
     let bg = isVideo ? mediaElem.parentElement : tweetPhoto.querySelector('div[style^="background-image"]');
 
     let linkElem = tweetPhoto.querySelector('div[data-testid="videoPlayer"]') ?? mediaElem.closest('a');
@@ -743,6 +743,27 @@ function updateContentElement(tweetData, mediaInfo, elemIndex, elemCnt)
     if(isVideo)
     {
         addDownloadButton(tweetData, mediaInfo);
+        //Consistent video controls for GIF videos too
+        if(mediaInfo.data.srcURL.includes('/tweet_video_thumb'))
+        {
+            mediaElem.removeAttribute('controls');
+            mediaElem.onplaying = (e) => { if(!mediaElem.paused && !mediaElem.getAttribute("isHovering")) { mediaElem.removeAttribute('controls'); } };
+            mediaElem.onmouseover = (e) => { mediaElem.controls = true; mediaElem.setAttribute("isHovering", true); };
+            mediaElem.onmouseout = (e) => { if(!mediaElem.paused ) { mediaElem.removeAttribute('controls'); mediaElem.removeAttribute("isHovering"); } };
+
+            let vidComp = mediaElem.closest('div[data-testid="videoComponent"]');
+            if(vidComp)
+            {
+                if(vidComp.childElementCount > 1)
+                {
+                    let tab = vidComp.lastElementChild;
+                    if(tab)
+                    {
+                        tab.remove();
+                    }
+                }
+            }
+        }
     }
     else if(mediaElem.src != mediaInfo.data.contentURL)
     {
@@ -775,10 +796,15 @@ function updateContentLayout(tweetData, mediaElems)
 
     let elemCnt = mediaElems.length;
 
-    let ratio = 100;
+    let ratio = (mediaElems[0].data.height / mediaElems[0].data.width);
 
-    ratio = (mediaElems[0].data.height / mediaElems[0].data.width) * 100;
-
+    if(elemCnt < 2 && mediaElems[0].data.isVideo)
+    {
+        let innerHeight = window.innerHeight;
+        let curRatio = (innerHeight / curLayoutWidth) * 0.8;
+        if(curRatio < ratio) ratio = curRatio;
+    }
+    ratio *= 100;
     if (elemCnt == 2)
     {
         let img1 = mediaElems[0];
@@ -804,6 +830,13 @@ function updateContentLayout(tweetData, mediaElems)
         {
             //if(ratio > 1.0) {   ratio = ((ratio - 1.0) * 0.5) + 1.0;}
             ratio *= 0.5;
+        }
+
+        if (imgToRatio.data.isVideo && imgToRatio.data.width > imgToRatio.data.height)
+        {
+            ratio = (img1.data.height + img2.data.height) / img1.data.width;
+            const padderly = tweetData.tweetElem.querySelector('div[id^="id_"] div[style^="padding-bottom"]');
+            padderly.parentElement.lastElementChild.firstElementChild.style.flexDirection = "column";
         }
 
         ratio = Math.min(ratio, 3.0);
@@ -909,14 +942,14 @@ function processTweetContent(tweetData)
         let mediaData = tweetData.getMediaData(i);
         mediaInfos[i] = { data: mediaData, mediaElem: null, linkElem: null, tweetPhotoElem: null, bgElem: null, flex: null };
 
-        if(mediaData.type == 'photo')
+        if(!mediaData.isVideo)
         {
             let srcID = mediaData.srcURL.substring(mediaData.srcURL.lastIndexOf('/') + 1).split('?')[0].split('.')[0];
             elemsQuery[i] = awaitElem(tweetData.tweetElem, `[src*="${srcID}"]`, argsChildAndSub);
         }
         else
         {
-            elemsQuery[i] = awaitElem(tweetData.tweetElem, `video[poster="${mediaData.srcURL}"]`, argsChildAndSub);
+            elemsQuery[i] = awaitElem(tweetData.tweetElem, `video[poster^="${mediaData.srcURL.split('?')[0]}"]`, argsChildAndSub);
         }
     }
 
@@ -1085,8 +1118,11 @@ function primaryColumnResizer(primaryColumn, mouseEvent, mouseDown, mouseUp)
     }
 }
 
+var curLayoutWidth = 600;
+
 function updateLayoutWidth(width, finalize)
 {
+    curLayoutWidth = width;
     if(!toggleTimelineScaling.enabled) { return; }
 
     maxWidthClass.style.setProperty('max-width', width + "px");
@@ -1497,7 +1533,7 @@ async function updateFullViewImage(ctxTarget, tweetData, mediaData)
    //  let hqSrc = img.src;
 
     addCustomCtxMenu(tweetData, mediaInfo, ctxTarget);
-    if(mediaData.type == 'photo')
+    if(!mediaData.isVideo)
     {
         updateImgSrc(ctxTarget, bg, hqSrc);
         doOnAttributeChange(ctxTarget, (ctxTarg) => { updateImgSrc(ctxTarg, bg, hqSrc); }, false);
