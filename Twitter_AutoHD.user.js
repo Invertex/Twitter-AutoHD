@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.24
+// @version      2.28
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -223,7 +223,7 @@ var authy = "";
                 }
             })
         }
-        else if(url.includes('guide.json')) //Explore
+     /*   else if(url.includes('guide.json')) //Explore
         {
              this.addEventListener('readystatechange', function (e)
             {
@@ -231,10 +231,13 @@ var authy = "";
                 {
                      let json = JSON.parse(e.target.response);
                     processExploreData(json?.globalObjects?.tweets);
+
+                    Object.defineProperty(this, 'responseText', { writable: true });
+                    this.responseText = JSON.stringify(json);
                 }
 
              });
-        }
+        }*/
 
         open.apply(this, arguments);
     };
@@ -506,7 +509,13 @@ function processTweetsQuery(entries)
 
 function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor, onHovering, onNotHovering)
 {
-    let getButtonToDupe = function (btnGrp) { return btnGrp.lastChild.cloneNode(true); };
+    let getButtonToDupe = function (btnGrp)
+    {
+        let lastChd = btnGrp.lastChild;
+        let newNode = lastChd.cloneNode(true);
+        lastChd.className = btnGrp.childNodes.item(2).className;
+        return newNode; };
+
     let isIframe = false;
     let id = "thd_button_" + name;
 
@@ -1146,6 +1155,7 @@ function refreshLayoutWidth()
 //<--> TIMELINE PROCESSING <-->//
 async function onTimelineContainerChange(container, mutations)
 {
+     replaceMuskratText(container);
     LogMessage("on timeline container change");
     let tl = await awaitElem(container, 'DIV[style*="position:"]', { childList: true, subtree: true, attributes: true });
     observeTimeline(tl);
@@ -1153,6 +1163,7 @@ async function onTimelineContainerChange(container, mutations)
 
 function onTimelineChange(addedNodes)
 {
+ // replaceMuskratText(document.body);
     LogMessage("on timeline change");
     if (addedNodes.length == 0) { LogMessage("no added nodes"); return; }
     addedNodes.forEach((child) =>
@@ -1209,6 +1220,7 @@ var pageWidthLayoutRule;
 
 async function watchPrimaryColumn(main, primaryColumn)
 {
+
     if(primaryColumn == null) { return; }
     if (addHasAttribute(primaryColumn, modifiedAttr)) { return; }
 
@@ -1259,9 +1271,28 @@ async function watchPrimaryColumn(main, primaryColumn)
 
 async function onMainChange(main, mutations)
 {
-    awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>{ watchPrimaryColumn(main, primaryColumn); });
+    replaceMuskratText(document.body);
+    awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>{ watchPrimaryColumn(main, primaryColumn); replaceMuskratText(document.body); });
+
     watchSideBar(main);
 }
+
+
+function replaceMuskratText(root)
+{
+    let labels = root.querySelectorAll('span, span > span');
+
+    for(let i = 0; i < labels.length; i++)
+    {
+        let label = labels[i];
+        if(label.innerText == "Post")
+        {
+            label.innerText = "Tweet";
+        }
+        else if(label.innerText == "Posts") { label.innerText == "Tweets"; }
+    }
+}
+
 
 function hideForYou(primaryColumn)
 {
@@ -1298,7 +1329,7 @@ async function watchSideBar(main)
         awaitElem(sideBar, 'section[role="region"] > [role="heading"]', argsChildAndSub).then((sideBarTrending) =>
         {
             let veriNag = sideBar.querySelector('aside');
-            awaitElem(sideBar, 'aside').then((nag) => { nag.remove();});
+            awaitElem(sideBar, 'aside', argsChildAndSub).then((nag) => { nag.remove();});
 
             setupTrendingControls(sideBarTrending.parentElement);
             setupToggles(sideBar);
@@ -2101,7 +2132,9 @@ function watchForChange(root, obsArguments, onChange)
 {
     const rootObserver = new MutationObserver(function (mutations)
     {
+        rootObserver?.disconnect();
         mutations.forEach((mutation) => onChange(root, mutation));
+         rootObserver?.observe(root, obsArguments);
     });
     rootObserver.observe(root, obsArguments);
     return rootObserver;
