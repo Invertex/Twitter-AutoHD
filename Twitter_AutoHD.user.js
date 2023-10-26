@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.28
+// @version      2.29
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -514,7 +514,8 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor, onHover
         let lastChd = btnGrp.lastChild;
         let newNode = lastChd.cloneNode(true);
         lastChd.className = btnGrp.childNodes.item(2).className;
-        return newNode; };
+        return {btn: newNode, origBtn: lastChd}
+    };
 
     let isIframe = false;
     let id = "thd_button_" + name;
@@ -528,7 +529,8 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor, onHover
             isIframe = true;
             getButtonToDupe = function (btnGrp)
             {
-                return btnGrp.querySelector('a:nth-child(2)').cloneNode(true);
+                let orig = btnGrp.querySelector('a:nth-child(2)');
+                return { btn: orig.cloneNode(true), origBtn: orig };
             };
         }
     }
@@ -542,11 +544,20 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor, onHover
         if(analBtn) { analBtn.parentElement.style.display = "none"; }
     }
 
-    let btn = getButtonToDupe(buttonGrp);
+    let btnDupe = getButtonToDupe(buttonGrp);
 
-    if(btn != null)
+    if(btnDupe.btn != null)
     {
+        let btn = btnDupe.btn;
         buttonGrp.appendChild(btn);
+        let shareBtn = btnDupe.origBtn.querySelector('[aria-label^="Share"]');
+        if(shareBtn)
+        {
+            console.log(shareBtn);
+            buttonGrp.appendChild(btnDupe.origBtn);
+            btnDupe.origBtn.style += " -webkit-flex-grow: 0.1; flex-grow: 0.1 !important;";
+        }
+
         btn.id = id;
         btn.style.marginRight = "8px";
         btn.style.marginLeft = "8px";
@@ -592,10 +603,10 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor, onHover
         $(svgElem).css("color", oldIconColor);
 
 
-        return {btn: btn, inIframe: isIframe, svg: svgElem, doHover: hover, doUnhover: unhover, updateCol: updateColor};
+        return {btn: btn, origBtn: btnDupe.origBtn, inIframe: isIframe, svg: svgElem, doHover: hover, doUnhover: unhover, updateCol: updateColor};
     }
 
-    return {btn: btn, inIframe: isIframe, svg: null};
+    return null;
 }
 
 function addBookmarkButton(tweetData)
@@ -604,7 +615,16 @@ function addBookmarkButton(tweetData)
     let tweet = tweetData.tweetElem;
     if(tweet == null) { return; }
 
-    if(tweet.querySelector('div[data-testid="bookmark"]') != null) { return; }
+    let existingBookmark = tweet.querySelector('div[data-testid="bookmark"]');
+
+    if(existingBookmark != null)
+    {
+        existingBookmark = existingBookmark.parentElement;
+        existingBookmark.style += " -webkit-flex: 0.6 1.0; flex: 0.6 1.0;";;
+        let otherBtn = existingBookmark.closest('[role="group"]').childNodes.item(2);
+        $(existingBookmark).removeClass().addClass(otherBtn.className);
+        return;
+    }
 
     let onHoverStopped = function(svgElem, tweetID)
     {
@@ -616,9 +636,8 @@ function addBookmarkButton(tweetData)
 
     const btnCopy = getPostButtonCopy(tweet, "Bookmark", bookmarkSVG, "0 0 24 24", "#1c9bf0", "#1c9bf01a", (data)=>{}, (svgElem) => {onHoverStopped(svgElem, id);});
 
-    if(btnCopy == null) { return; }
+    if(btnCopy == null || btnCopy.btn == null) { return; }
     let btn = btnCopy.btn;
-    if(btn == null) { return; }
 
     onHoverStopped(btnCopy.svg, id);
 
@@ -652,6 +671,8 @@ function addBookmarkButton(tweetData)
             });
         }
     });
+
+    btnCopy.btn.style += " -webkit-flex: 0.6 1.0; flex: 0.6 1.0;";;
 }
 
 async function addDownloadButton(tweetData, mediaInfo)
@@ -672,13 +693,16 @@ async function addDownloadButton(tweetData, mediaInfo)
     const filename = filenameFromMediaData(mediaInfo.data);
 
     dlBtn.href = vidUrl;
-
-    const linkElem = isIframe ? dlBtn : $(dlBtn).wrapAll(`<a href="${vidUrl}" download="${filename}" style=""></a>`)[0].parentElement;
+    const linkElem = dlBtn
 
     if (isIframe)
     {
+        let classy = dlBtn.className;
+        dlBtn.className = "";
+        linkElem = $(dlBtn).wrapAll(`<a href="${vidUrl}" download="${filename}" style=""></a>`)[0].parentElement;
         linkElem.setAttribute('download', filename);
         dlBtn.querySelector('div[dir="auto"] > span').innerText = "Download";
+        btnCopy.btn = $(linkElem).wrapAll(`<div class="${classy}"></a>`)[0].parentElement;
     }
     else
     {
@@ -691,6 +715,9 @@ async function addDownloadButton(tweetData, mediaInfo)
     $(linkElem).click(function (e) { e.preventDefault();
         e.stopPropagation();
         download(vidUrl, filename); });
+
+    btnCopy.btn.className = btnCopy.origBtn.className;
+    btnCopy.btn.style += " -webkit-flex: 0.6 1.0; flex: 0.6 1.0;";;
 }
 
 function waitForImgLoad(img)
