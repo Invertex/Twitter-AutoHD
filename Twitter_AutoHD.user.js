@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.29
+// @version      2.31
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -538,11 +538,11 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor, onHover
 
     buttonGrp.style.maxWidth = "100%";
 
-    if(!toggleAnalyticsDisplay.enabled)
+    /*if(!toggleAnalyticsDisplay.enabled)
     {
         let analBtn = buttonGrp.querySelector('a[href$="/analytics"]');
         if(analBtn) { analBtn.parentElement.style.display = "none"; }
-    }
+    }*/
 
     let btnDupe = getButtonToDupe(buttonGrp);
 
@@ -553,7 +553,6 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor, onHover
         let shareBtn = btnDupe.origBtn.querySelector('[aria-label^="Share"]');
         if(shareBtn)
         {
-            console.log(shareBtn);
             buttonGrp.appendChild(btnDupe.origBtn);
             btnDupe.origBtn.style += " -webkit-flex-grow: 0.1; flex-grow: 0.1 !important;";
         }
@@ -677,7 +676,7 @@ function addBookmarkButton(tweetData)
 
 async function addDownloadButton(tweetData, mediaInfo)
 {
-    for(let i = mediaInfo.data.mediaNum - 2; i > 0; i--)
+    for(let i = mediaInfo.data.mediaNum - 1; i > 0; i--)
     {
         if(tweetData.media[i].isVideo) { return; }
     }
@@ -750,7 +749,7 @@ function updateElemPadding(panelCnt, background, imgContainerElem)
     }
     if (panelCnt < 2)
     {
-        imgContainerElem.removeAttribute('style');
+       // imgContainerElem.removeAttribute('style');
     }
     else
     {
@@ -1015,6 +1014,7 @@ async function processTweet(tweet, tweetObserver)
     addBookmarkButton(tweetData);
 
     if(tweetData.hasMedia) { processTweetContent(tweetData); }
+
     if(tweetData.isQuote && tweetData.quote.hasMedia) {
         tweetData.quote.tweetElem = tweet;
         processTweetContent(tweetData.quote);
@@ -1027,7 +1027,12 @@ async function listenForMediaType(tweet)
 
   //  if(!setupFilters(tweet)) { return; }
 
-    const tweetObserver = new MutationObserver((muteList, observer) => { processTweet(tweet, observer); });
+    const tweetObserver = new MutationObserver((muteList, observer) => {
+        tweetObserver.disconnect();
+        processTweet(tweet, observer);
+        tweetObserver.observe(tweet, { attributes: true, childList: true, subtree: true });
+    });
+
     processTweet(tweet, tweetObserver);
     tweetObserver.observe(tweet, { attributes: true, childList: true, subtree: true });
 }
@@ -1238,7 +1243,11 @@ async function watchForTimeline(primaryColumn, section)
 
     checkTimeline();
 
-    let progBarObserver = new MutationObserver((mutations) => { checkTimeline(); });
+    let progBarObserver = new MutationObserver((mutations) => {
+        progBarObserver.disconnect();
+        checkTimeline();
+        progBarObserver.observe(section, { attributes: false, childList: true });
+    });
     progBarObserver.observe(section, { attributes: false, childList: true });
 }
 
@@ -1290,7 +1299,6 @@ async function watchPrimaryColumn(main, primaryColumn)
     //  let section = awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub);
     awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) =>
     {
-        LogMessage("region found");
         watchForTimeline(primaryColumn, section);
     });
 
@@ -1386,7 +1394,7 @@ async function loadToggleValues()
 
     if(!toggleAnalyticsDisplay.enabled)
     {
-        addGlobalStyle('div[role="group"] > div > a[href$="/analytics"] { display: none !important; }');
+        addGlobalStyle('div[role="group"] > div:has(> a[href$="/analytics"]) { display: none !important; }');
     }
 }
 
@@ -2161,7 +2169,7 @@ function watchForChange(root, obsArguments, onChange)
     {
         rootObserver?.disconnect();
         mutations.forEach((mutation) => onChange(root, mutation));
-         rootObserver?.observe(root, obsArguments);
+        rootObserver?.observe(root, obsArguments);
     });
     rootObserver.observe(root, obsArguments);
     return rootObserver;
@@ -2184,14 +2192,14 @@ async function watchForAddedNodes(root, stopAfterFirstMutation, obsArguments, ex
     const rootObserver = new MutationObserver(
         function (mutations)
         {
+            rootObserver.disconnect();
             //  LogMessage("timeline mutated");
             mutations.forEach(function (mutation)
             {
                 if (mutation.addedNodes == null || mutation.addedNodes.length == 0) { return; }
-                if (stopAfterFirstMutation) { rootObserver.disconnect(); }
                 executeAfter(mutation.addedNodes);
             });
-
+            if (!stopAfterFirstMutation) { rootObserver.observe(root, obsArguments); }
         });
 
     rootObserver.observe(root, obsArguments);
@@ -2202,8 +2210,8 @@ function findElem(rootElem, query, observer, resolve)
     const elem = rootElem.querySelector(query);
     if (elem != null && elem != undefined)
     {
-        resolve(elem);
         observer?.disconnect();
+        resolve(elem);
     }
     return elem;
 }
@@ -2396,6 +2404,7 @@ async function swapTwitterSplashLogo(reactRoot)
         awaitElem(isIframe, 'article[role="article"]', argsChildAndSub).then(listenForMediaType);
         return;
     }
+
     const reactRoot = await awaitElem(document.body, 'div#react-root', argsChildAndSub);
     swapTwitterSplashLogo(reactRoot);
     const main = await awaitElem(reactRoot, 'main[role="main"] div', argsChildAndSub);
