@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.31
+// @version      2.32
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -53,20 +53,6 @@ addGlobalStyle('.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; 
 addGlobalStyle('.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; user-select: none;}');
 addGlobalStyle('.context-menu ul li:hover { background: #202020;}');
 
-//<--> Save/Load User Cutom Layout Width <-->//
-const usePref_MainWidthKey = "thd_primaryWidth";
-const usePref_hideTrendingKey = "thd_hideTrending";
-const usePref_blurNSFW = "thd_blurNSFW";
-const usePref_toggleHQImg = "thd_toggleHQImg";
-const usePref_toggleLiked = "thd_toggleLiked";
-const usePref_toggleRetweet = "thd_toggleRetweet";
-const usePref_toggleFollowed = "thd_toggleFollowed";
-const usePref_toggleTopics = "thd_toggleTopics";
-const usePref_toggleClearTopics = "thd_toggleClearTopics";
-const usePref_lastTopicsClearTime = "thd_lastTopicsClearTime";
-const usePref_toggleTimelineScaling = "thd_toggleTimelineScaling";
-const usePref_toggleAnalyticsDisplay = "thd_toggleAnalyticsDisplay";
-const usePref_toggleDisableForYou = "thd_toggleDisableForYou";
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
@@ -391,7 +377,6 @@ function processTimelineItem(item)
 
     return true;
 }
-
 
 function processTimelineEntry(entry)
 {
@@ -761,7 +746,6 @@ function updateElemPadding(panelCnt, background, imgContainerElem)
 
 function updateContentElement(tweetData, mediaInfo, elemIndex, elemCnt)
 {
-    let hqSrc = tweetData.data.urlSrc;
     let mediaElem = mediaInfo.mediaElem;
     let tweetPhoto = mediaElem.closest('div[data-testid="tweetPhoto"]');
     const flexDir = $(tweetPhoto).css('flex-direction');
@@ -1006,6 +990,12 @@ async function processTweet(tweet, tweetObserver)
     tweetObserver.disconnect();
     addHasAttribute(tweet, modifiedAttr);
 
+    if(toggleMakeLinksVX.enabled)
+    {
+        awaitElem(tweet, 'a:has(> time)', { childList: true, subtree: true, attributes: false}).then((linky) => {
+            linky.href = replaceWithVX(linky.href);
+        });
+    }
     if(isAdvert(tweet)) { return; }
 
     let tweetData = getTweetData(tweet);
@@ -1346,6 +1336,12 @@ function hideForYou(primaryColumn)
 }
 
 //<--> RIGHT SIDEBAR CONTENT <-->//
+
+//<--> Save/Load User Cutom Prefs <-->//
+const usePref_MainWidthKey = "thd_primaryWidth";
+const usePref_hideTrendingKey = "thd_hideTrending";
+const usePref_lastTopicsClearTime = "thd_lastTopicsClearTime";
+
 var toggleNSFW;
 var toggleHQImg;
 var toggleLiked;
@@ -1356,6 +1352,7 @@ var toggleClearTopics;
 var toggleTimelineScaling;
 var toggleAnalyticsDisplay;
 var toggleDisableForYou;
+var toggleMakeLinksVX;
 
 async function watchSideBar(main)
 {
@@ -1379,18 +1376,21 @@ async function getToggleObj(name, defaultVal)
     return {enabled: enable, elem: null, name: name, onChanged: new EventTarget(), listen: function(func) { this.onChanged.addEventListener(this.name, func); }};
 }
 
+
 async function loadToggleValues()
 {
-    toggleNSFW = await getToggleObj(usePref_blurNSFW, false);
-    toggleHQImg = await getToggleObj(usePref_toggleHQImg, true);
-    toggleLiked = await getToggleObj(usePref_toggleLiked, true);
-    toggleFollowed = await getToggleObj(usePref_toggleFollowed, false);
-    toggleRetweet = await getToggleObj(usePref_toggleRetweet, false);
-    toggleTopics = await getToggleObj(usePref_toggleTopics, false);
-    toggleClearTopics = await getToggleObj(usePref_toggleClearTopics, false);
-    toggleTimelineScaling = await getToggleObj(usePref_toggleTimelineScaling, true);
-    toggleAnalyticsDisplay = await getToggleObj(usePref_toggleAnalyticsDisplay, false);
-    toggleDisableForYou = await getToggleObj(usePref_toggleDisableForYou, false);
+    toggleNSFW = await getToggleObj("thd_blurNSFW", false);
+    toggleHQImg = await getToggleObj("thd_toggleHQImg", true);
+    toggleLiked = await getToggleObj("thd_toggleLiked", true);
+    toggleFollowed = await getToggleObj("thd_toggleFollowed", false);
+    toggleRetweet = await getToggleObj("thd_toggleRetweet", false);
+    toggleTopics = await getToggleObj("thd_toggleTopics", false);
+    toggleClearTopics = await getToggleObj("thd_toggleClearTopics", false);
+    toggleTimelineScaling = await getToggleObj("thd_toggleTimelineScaling", true);
+    toggleAnalyticsDisplay = await getToggleObj("thd_toggleAnalyticsDisplay", false);
+    toggleDisableForYou = await getToggleObj("thd_toggleDisableForYou", false);
+    toggleMakeLinksVX = await getToggleObj("thd_makeLinksVX", true);
+
 
     if(!toggleAnalyticsDisplay.enabled)
     {
@@ -1400,16 +1400,17 @@ async function loadToggleValues()
 
 async function setupToggles(sidePanel)
 {
-    createToggleOption(sidePanel, toggleNSFW, "NSFW Blur ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleHQImg, "HQ Image Loading ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleLiked, "Liked Tweets ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleFollowed, "Followed By Tweets ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleRetweet, "Retweets ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleTopics, "Topic Tweets ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleClearTopics, "Interests/Topics Prefs AutoClear ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleTimelineScaling, "Timeline Width Scaling ", "ON", "OFF");
-    createToggleOption(sidePanel, toggleAnalyticsDisplay, "Show Post Views ", "ON", "OFF");
-    await createToggleOption(sidePanel, toggleDisableForYou, 'Disable "For You" page ', "ON", "OFF");
+    createToggleOption(sidePanel, toggleNSFW, "NSFW Blur: ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleHQImg, "HQ Image Loading: ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleTimelineScaling, "Timeline Width Scaling: ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleMakeLinksVX, "Replace Links with VX Link: ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleLiked, "Liked Tweets: ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleFollowed, "Followed By Tweets: ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleRetweet, "Retweets: ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleTopics, "Topic Tweets: ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleClearTopics, "Interests/Topics Prefs AutoClear: ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleAnalyticsDisplay, "Show Post Views: ", "ON", "OFF");
+    await createToggleOption(sidePanel, toggleDisableForYou, 'Disable "For You" page: ', "ON", "OFF");
 }
 
 async function createToggleOption(sidePanel, toggleState, toggleText, toggleOnText, toggleOffText)
@@ -2382,6 +2383,38 @@ async function swapTwitterSplashLogo(reactRoot)
     let logo = await awaitElem(reactRoot, 'header h1 > a svg', argsChildAndSub);
     logo.innerHTML = twitSVG;
 }
+
+function replaceWithVX(txt)
+{
+    if(!toggleMakeLinksVX.enabled) { return txt; }
+    if(txt.includes('/status/') && !txt.includes('//vxtwitter.com/'))
+    {
+        if(!txt.includes('.com'))
+        {
+            return 'https://vxtwitter.com' + txt;
+        }
+        return txt.split('?')[0].replace('//twitter.com/','//vxtwitter.com/').replace('//x.com/', '//vxtwitter.com/');
+    }
+    return txt;
+}
+
+document.addEventListener('copy', function(e)
+{
+    if(toggleMakeLinksVX.enabled)
+    {
+        console.log(window.getSelection());
+        console.log(e);
+        let txt = e?.srcElement?.innerText;
+        if(txt && (txt.startsWith('http') || txt.startsWith("x.com") || txt.startsWith("twitter.com")))
+        {
+            txt = replaceWithVX(txt);
+
+            e.clipboardData.setData('text/plain', txt);
+            e.preventDefault();
+        }
+    }
+});
+
 
 (async function ()
 {
