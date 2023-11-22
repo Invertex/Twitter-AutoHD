@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.32
+// @version      2.33
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -1443,14 +1443,16 @@ var blurShowText = "";
 
 async function processBlurButton(tweet)
 {
+    console.log("proc blur");
     const getBlurText = function(blur)
     {
         return blur.querySelector('span > span').innerText;
     }
 
-    const blurBtn = tweet.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
+    const blurBtn = tweet.querySelector('div[role="button"][style*="backdrop-filter: blur"]');
     if(blurBtn != null)
     {
+          console.log("found blur btn");
         if(blurShowText == "")
         {
             blurShowText = getBlurText(blurBtn);
@@ -1463,7 +1465,7 @@ async function processBlurButton(tweet)
 
         watchForChange(tweet, {attributes: false, childList: true, subtree: true}, (blurParent, mutes) => {
 
-            const curBlur = blurParent.querySelector('div[role="button"][style^="backdrop-filter: blur"]');
+            const curBlur = blurParent.querySelector('div[role="button"][style*="backdrop-filter: blur"]');
             if(curBlur == null) { return; }
 
             if(!toggleNSFW.enabled && getBlurText(curBlur) == blurShowText)
