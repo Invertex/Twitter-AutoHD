@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.33
+// @version      2.34
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -176,7 +176,7 @@ var authy = "";
                 }
             });
         }
-        else if(url.includes('/Home') || url.includes('includePromotedContent'))
+        else if(url.includes('/Home') || url.includes('includePromotedContent') || url.includes('ListLatestTweetsTimeline'))
         {
             url = url.replace('includePromotedContent%22%3Atrue', 'includePromotedContent%22%3Afalse');
             url = url.replace('phone_label_enabled%22%3Afalse', 'phone_label_enabled%22%3Atrue');
@@ -421,6 +421,7 @@ function processTimelineData(json)
     if(instructions == null) { instructions = json.data?.user?.result?.timeline_v2?.timeline?.instructions; }
     if(instructions == null) { instructions = json.data?.threaded_conversation_with_injections_v2?.instructions; }
     if(instructions == null) { instructions = json.data?.bookmark_timeline_v2?.timeline?.instructions; }
+    if(instructions == null) { instructions = json.data?.list?.tweets_timeline?.timeline?.instructions; }
     if(instructions == null) { return; }
 
     for(let inst = 0; inst < instructions.length; inst++)
