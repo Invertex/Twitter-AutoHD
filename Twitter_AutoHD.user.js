@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.35
+// @version      2.38
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -52,7 +52,7 @@ addGlobalStyle('.context-menu { position: absolute; text-align: center; margin: 
 addGlobalStyle('.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; list-style: none;}');
 addGlobalStyle('.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; user-select: none;}');
 addGlobalStyle('.context-menu ul li:hover { background: #202020;}');
-addGlobalStyle('a[aria-label="Grok"], div > aside[aria-label*="Premium"] { display: none !important; }');
+addGlobalStyle('a[aria-label="Grok"], div > aside[aria-label*="Premium"], div[data-testid="inlinePrompt"]:has(div > a[href^="/i/premium_sign_up"]) { display: none !important; }');
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
@@ -189,8 +189,15 @@ var authy = "";
             {
                 if (this.readyState === 4)
                 {
-                    let json = JSON.parse(e.target.response);
+                    let json;
 
+                    try{
+                        json = JSON.parse(e.target.response);
+                    } catch(e) {
+                        console.log("Empty response, Twitter code is bad, let's refresh.");
+                        window.location.href = window.location.href;
+                        return;
+                    }
                     if(json.data)
                     {
                         processTimelineData(json);
@@ -2442,6 +2449,7 @@ document.addEventListener('copy', function(e)
     swapTwitterSplashLogo(reactRoot);
     const main = await awaitElem(reactRoot, 'main[role="main"] div', argsChildAndSub);
     await prefsLoading;
+
     let layers = reactRoot.querySelector('div#layers');
 
     awaitElem(reactRoot, 'div#layers', argsChildAndSub).then((layers) =>
