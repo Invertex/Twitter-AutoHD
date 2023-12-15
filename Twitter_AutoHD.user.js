@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.34
+// @version      2.35
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -52,7 +52,7 @@ addGlobalStyle('.context-menu { position: absolute; text-align: center; margin: 
 addGlobalStyle('.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; list-style: none;}');
 addGlobalStyle('.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; user-select: none;}');
 addGlobalStyle('.context-menu ul li:hover { background: #202020;}');
-
+addGlobalStyle('a[aria-label="Grok"], div > aside[aria-label*="Premium"] { display: none !important; }');
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
@@ -1361,9 +1361,6 @@ async function watchSideBar(main)
     {
         awaitElem(sideBar, 'section[role="region"] > [role="heading"]', argsChildAndSub).then((sideBarTrending) =>
         {
-            let veriNag = sideBar.querySelector('aside');
-            awaitElem(sideBar, 'aside', argsChildAndSub).then((nag) => { nag.remove();});
-
             setupTrendingControls(sideBarTrending.parentElement);
             setupToggles(sideBar);
             clearTopicsAndInterests();
