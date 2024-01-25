@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.39
+// @version      2.41
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -51,7 +51,7 @@ addGlobalStyle('.context-menu { position: absolute; text-align: center; margin: 
 addGlobalStyle('.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; list-style: none;}');
 addGlobalStyle('.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; user-select: none;}');
 addGlobalStyle('.context-menu ul li:hover { background: #202020;}');
-addGlobalStyle('a[aria-label="Grok"], div > aside[aria-label*="Premium"], div[data-testid="inlinePrompt"]:has(div > a[href^="/i/premium_sign_up"]) { display: none !important; }');
+addGlobalStyle('a[aria-label="Grok"], div > aside[aria-label*="Premium"], div[data-testid="inlinePrompt"]:has(div > a[href^="/i/premium_sign_up"]), div:has(> div > div[data-testid="bookmark"], > div > div[data-testid="removeBookmark"]) > div#thd_button_Bookmark { display: none !important; }');
 
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
@@ -522,6 +522,8 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor, onHover
     let getButtonToDupe = function (btnGrp)
     {
         let lastChd = btnGrp.lastChild;
+        //let bm = btnGrp.querySelector('div > div[data-testid="bookmark"], div > div[data-testid="removeBookmark"]');
+        //if(bm != null) { lastChd = bm.parentElement; }
         let newNode = lastChd.cloneNode(true);
         lastChd.className = btnGrp.childNodes.item(2).className;
         return {btn: newNode, origBtn: lastChd}
@@ -559,13 +561,13 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor, onHover
     if(btnDupe.btn != null)
     {
         let btn = btnDupe.btn;
-        buttonGrp.appendChild(btn);
-        let shareBtn = btnDupe.origBtn.querySelector('[aria-label^="Share"]');
-        if(shareBtn)
-        {
-            buttonGrp.appendChild(btnDupe.origBtn);
+        buttonGrp.insertBefore(btn, btnDupe.origBtn);
+       // let shareBtn = btnDupe.origBtn.querySelector('[aria-label^="Share"]');
+       // if(shareBtn)
+       // {
+      //      buttonGrp.appendChild(btnDupe.origBtn);
             btnDupe.origBtn.style += " -webkit-flex-grow: 0.1; flex-grow: 0.1 !important;";
-        }
+      //  }
 
         btn.id = id;
         btn.style.marginRight = "8px";
@@ -726,7 +728,7 @@ async function addDownloadButton(tweetData, mediaInfo)
         download(vidUrl, filename); });
 
     btnCopy.btn.className = btnCopy.origBtn.className;
-    btnCopy.btn.style += " -webkit-flex: 0.6 1.0; flex: 0.6 1.0;";;
+    btnCopy.btn.style += " -webkit-flex: 0.6 1.0; flex: 0.6 1.0; justify-content: center !important;";;
 }
 
 function waitForImgLoad(img)
