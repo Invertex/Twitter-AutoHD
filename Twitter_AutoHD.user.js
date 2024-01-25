@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.41
+// @version      2.43
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -15,6 +15,7 @@
 // @grant        GM_download
 // @grant        GM_openInTab
 // @grant        GM_setClipboard
+// @grant unsafeWindow
 // @grant GM_setValue
 // @grant GM_getValue
 // @grant GM.setValue
@@ -112,9 +113,10 @@ const BuildM3U = function (lines)
 };
 
 
+// Intercept relevant keys used by API so we can use the API too
 var transactID = "";
 var authy = "";
-// Grab relevant keys used by API so we can interface with it too
+
 (function (setRequestHeader)
 {
     XMLHttpRequest.prototype.setRequestHeader = function(name, value)
@@ -132,35 +134,65 @@ var authy = "";
     };
 })(XMLHttpRequest.prototype.setRequestHeader);
 
+var oldReqHead = unsafeWindow.XMLHttpRequest.prototype.setRequestHeader;
+unsafeWindow.XMLHttpRequest.prototype.setRequestHeader = exportFunction(function(name, value)
+{
+    if(name == "X-Client-Transaction-Id")
+    {
+        transactID = value;
+    }
+    else if(name == "authorization")
+    {
+        authy = value;
+    }
+    oldReqHead.call(this, name, value);
+}, unsafeWindow);
 
-//Intercept m3u8 playlist requests and modify the contents to only include the highest quality
+
+//Intercept the Timeline to pre-cache information about tweets and filter out unwanted tweets
+var openOpen = unsafeWindow.XMLHttpRequest.prototype.open;
+unsafeWindow.XMLHttpRequest.prototype.open = exportFunction(function(method, url)
+{
+    processXMLOpen(this, method, url);
+    openOpen.call(this, method, url);
+}, unsafeWindow);
+
+
 (function (open)
 {
     XMLHttpRequest.prototype.open = function (method, url)
     {
+        processXMLOpen(this, method, url);
+
+        open.apply(this, arguments);
+    };
+})(XMLHttpRequest.prototype.open);
+
+function processXMLOpen(thisRef, method, url)
+{
         if (url.includes('video.twimg.com') && url.includes('.m3u8?'))
         {
-            this.addEventListener('readystatechange', function (e)
+            thisRef.addEventListener('readystatechange', function (e)
             {
 
-                if (this.readyState === 4)
+                if (thisRef.readyState === 4)
                 {
 
                     const lines = e.target.responseText.split('#');
                     const m3u = BuildM3U(lines);
 
-                    Object.defineProperty(this, 'response', { writable: true });
-                    Object.defineProperty(this, 'responseText', { writable: true });
-                    this.response = this.responseText = m3u;
+                    Object.defineProperty(thisRef, 'response', { writable: true });
+                    Object.defineProperty(thisRef, 'responseText', { writable: true });
+                    thisRef.response = thisRef.responseText = m3u;
                 }
             });
         }
         else if(url.includes('show.json?'))
         {
-            this.addEventListener('readystatechange', function (e)
+            thisRef.addEventListener('readystatechange', function (e)
             {
 
-                if (this.readyState === 4)
+                if (thisRef.readyState === 4)
                 {
                     let json = JSON.parse(e.target.response);
                     let vidInfo = json.extended_entities?.media?.video_info ?? null;
@@ -169,8 +201,8 @@ var authy = "";
                     {
                         vidInfo.variants = [stripVariants(vidInfo.variants)];
 
-                        Object.defineProperty(this, 'responseText', { writable: true });
-                        this.responseText = JSON.stringify(json);
+                        Object.defineProperty(thisRef, 'responseText', { writable: true });
+                        thisRef.responseText = JSON.stringify(json);
                     }
                 }
             });
@@ -185,9 +217,9 @@ var authy = "";
             url = url.replace('article_tweet_consumption_enabled%22%3Atrue', 'article_tweet_consumption_enabled%22%3Afalse');
             url = url.replace('count%22%3A20', 'count%22%3A30');
 
-            this.addEventListener('readystatechange', function (e)
+            thisRef.addEventListener('readystatechange', function (e)
             {
-                if (this.readyState === 4)
+                if (thisRef.readyState === 4)
                 {
                     let json;
 
@@ -202,16 +234,16 @@ var authy = "";
                     {
                         processTimelineData(json);
 
-                        Object.defineProperty(this, 'responseText', { writable: true });
+                        Object.defineProperty(thisRef, 'responseText', { writable: true });
 
-                        this.responseText = JSON.stringify(json);
+                        thisRef.responseText = JSON.stringify(json);
                     }
                     else if(json.data.threaded_conversation_with_injections_v2)
                     {
                         json.data.threaded_conversation_with_injections_v2.instructions[0].entries = processTweetsQuery(json.data.threaded_conversation_with_injections_v2.instructions[0].entries);
-                        Object.defineProperty(this, 'responseText', { writable: true });
+                        Object.defineProperty(thisRef, 'responseText', { writable: true });
 
-                        this.responseText = JSON.stringify(json);
+                        thisRef.responseText = JSON.stringify(json);
                     }
                 }
             })
@@ -231,10 +263,7 @@ var authy = "";
 
              });
         }*/
-
-        open.apply(this, arguments);
-    };
-})(XMLHttpRequest.prototype.open);
+}
 
 function isTweetBookmarked(id)
 {
@@ -1043,7 +1072,6 @@ async function listenForMediaType(tweet)
     if (addHasAttribute(tweet, "thd_observing")) { return; }
 
   //  if(!setupFilters(tweet)) { return; }
-
     const tweetObserver = new MutationObserver((muteList, observer) => {
         tweetObserver.disconnect();
         processTweet(tweet, observer);
@@ -1213,7 +1241,6 @@ async function onTimelineContainerChange(container, mutations)
 function onTimelineChange(addedNodes)
 {
  // replaceMuskratText(document.body);
-    LogMessage("on timeline change");
     if (addedNodes.length == 0) { LogMessage("no added nodes"); return; }
     addedNodes.forEach((child) =>
     {
@@ -1273,7 +1300,6 @@ var pageWidthLayoutRule;
 
 async function watchPrimaryColumn(main, primaryColumn)
 {
-
     if(primaryColumn == null) { return; }
     if (addHasAttribute(primaryColumn, modifiedAttr)) { return; }
 
@@ -1323,6 +1349,7 @@ async function watchPrimaryColumn(main, primaryColumn)
 
 async function onMainChange(main, mutations)
 {
+
     replaceMuskratText(document.body);
     awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>{ watchPrimaryColumn(main, primaryColumn); replaceMuskratText(document.body); });
 
@@ -1512,14 +1539,12 @@ async function processBlurButton(tweet)
     const blurBtn = tweet.querySelector(nsfwBlurBtnQuery);
     if(blurBtn != null)
     {
-     console.log(blurBtn);
         if(blurShowText == "")
         {
             blurShowText = getBlurText(blurBtn);
         }
         if(!toggleNSFW.enabled)
         {
-            console.log("blur click");
             blurBtn.click();
         }
         blurBtn.style.display = toggleNSFW.enabled ? "block" : "none";
@@ -2000,7 +2025,6 @@ function getTweetData(tweet)
     let tweetData = tweets.get(id);
     if(tweetData == null) { return null; }
     tweetData.tweetElem = tweet;
-
     return tweetData;
 }
 
@@ -2373,7 +2397,7 @@ function LogMessage(text) { /*console.log(text);*/ }
 
 function addGlobalStyle(css, id)
 {
-    if(id && document.querySelector('#' + id)) { console.log("Style exists"); return; }
+    if(id && document.querySelector('#' + id)) { return; }
     let head, style;
     head = document.getElementsByTagName('head')[0];
     if (!head) { return; }
@@ -2405,7 +2429,6 @@ function removeGlobalStyle(id)
     if(styleElem)
     {
         head.removeChild(styleElem);
-  console.log("removed style elem");
     }
 }
 
@@ -2501,8 +2524,6 @@ document.addEventListener('copy', function(e)
 {
     if(toggleMakeLinksVX.enabled)
     {
-        console.log(window.getSelection());
-        console.log(e);
         let txt = e?.srcElement?.innerText;
         if(txt && (txt.startsWith('http') || txt.startsWith("x.com") || txt.startsWith("twitter.com")))
         {
