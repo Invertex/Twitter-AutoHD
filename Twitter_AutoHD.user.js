@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.38
+// @version      2.39
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -10,7 +10,6 @@
 // @match        https://*.twitter.com/*
 // @match        https://*.twimg.com/media/*
 // @match        https://*.x.com/*
-// @match        https://*.x.com/media/*
 // @noframes
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
@@ -53,6 +52,7 @@ addGlobalStyle('.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; 
 addGlobalStyle('.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; user-select: none;}');
 addGlobalStyle('.context-menu ul li:hover { background: #202020;}');
 addGlobalStyle('a[aria-label="Grok"], div > aside[aria-label*="Premium"], div[data-testid="inlinePrompt"]:has(div > a[href^="/i/premium_sign_up"]) { display: none !important; }');
+
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
@@ -138,7 +138,6 @@ var authy = "";
 {
     XMLHttpRequest.prototype.open = function (method, url)
     {
-
         if (url.includes('video.twimg.com') && url.includes('.m3u8?'))
         {
             this.addEventListener('readystatechange', function (e)
@@ -176,7 +175,8 @@ var authy = "";
                 }
             });
         }
-        else if(url.includes('/Home') || url.includes('includePromotedContent') || url.includes('ListLatestTweetsTimeline'))
+
+        else if(url.includes('/Home') || url.includes('includePromotedContent') || url.includes('ListLatestTweetsTimeline') || url.includes('/UserMedia'))
         {
             url = url.replace('includePromotedContent%22%3Atrue', 'includePromotedContent%22%3Afalse');
             url = url.replace('phone_label_enabled%22%3Afalse', 'phone_label_enabled%22%3Atrue');
@@ -410,7 +410,13 @@ function processTimelineEntry(entry)
             entry.content = {};
         }
     }
-
+    else if (entry?.item?.itemContent)
+    {
+        if(!processTimelineItem(entry.item.itemContent))
+        {
+            entry.item = {};
+        }
+    }
 }
 
 function processTimelineEntries(entries)
@@ -419,6 +425,13 @@ function processTimelineEntries(entries)
     for(let i = 0; i < entries.length; i++)
     {
         processTimelineEntry(entries[i]);
+    }
+}
+function processTimelineModuleEntries(moduleEntries)
+{
+        for(let i = 0; i < moduleEntries.length; i++)
+    {
+        processTimelineEntry(moduleEntries[i]);
     }
 }
 
@@ -441,6 +454,10 @@ function processTimelineData(json)
         else if(instruction.type == "TimelinePinEntry")
         {
             processTimelineEntry(instruction.entry); //Pinned tweet
+        }
+        else if(instruction.type == "TimelineAddToModule")
+        {
+            processTimelineModuleEntries(instruction.moduleItems); //Pinned tweet
         }
     }
 }
@@ -1381,6 +1398,37 @@ async function getToggleObj(name, defaultVal)
     return {enabled: enable, elem: null, name: name, onChanged: new EventTarget(), listen: function(func) { this.onChanged.addEventListener(this.name, func); }};
 }
 
+const nsfwBlurBtnSelector = 'div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]';
+const nsfwBlurBtnSubSelector = 'div[dir="ltr"] > span > span';
+
+const nsfwBlurBtnElemQuery = `${nsfwBlurBtnSelector}:has(> ${nsfwBlurBtnSubSelector})`;
+const nsfwBlurBtnElemSelector = `${nsfwBlurBtnSelector} > ${nsfwBlurBtnSubSelector}`;
+
+const nsfwBlurRootQuery = `div:has(> div > div > ${nsfwBlurBtnElemSelector}):has(div[data-testid="tweetPhoto"])`;
+const nsfwBlurUIQuery = `${nsfwBlurRootQuery} > div:has(${nsfwBlurBtnSelector}):has(${nsfwBlurBtnSubSelector})`;
+const nsfwBlurBtnQuery = `${nsfwBlurRootQuery} ${nsfwBlurBtnElemQuery}`;
+const nsfwBlurFilterQuery = `${nsfwBlurRootQuery} > div:has(div[data-testid="tweetPhoto"])`;
+
+function toggle_nsfwBlurStyle(enabled)
+{
+    if(!enabled)
+    {
+         //addGlobalStyle('div:has(> div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(> div > div > svg > g > path) { display: none !important; } div:has(> div > div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(div[data-testid="tweetPhoto"]) > div { filter: blur(0px) !important; }', "nsfwblur");
+        addGlobalStyle(`${nsfwBlurUIQuery} > div { display: none !important; } ${nsfwBlurFilterQuery} { filter: blur(0px) !important; }` +
+                       `div:has(> div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(> div > div > svg > g > path) { display: none !important; }`
+                        + `div:has(> div > div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(> div > div > div > svg > g > path):has(div[data-testid="tweetPhoto"]) > div { filter: blur(0px) !important; }` +
+                        //Media thumb view overlay css target
+                        `div[aria-label^="Timeline:"] div[data-testid="cellInnerDiv"] li[role="listitem"] div:has(> div > svg > g > path) > div:has(img) { filter: blur(0px) !important; }` +
+                        //Media thumb view filter css target
+                        `div[aria-label^="Timeline:"] div[data-testid="cellInnerDiv"] li[role="listitem"] div:has(> svg > g > path) { display: none !important; }`
+                        , "nsfwblur", "nsfwblur");
+
+    }
+    if(enabled)
+    {
+        removeGlobalStyle("nsfwblur");
+    }
+}
 
 async function loadToggleValues()
 {
@@ -1399,8 +1447,14 @@ async function loadToggleValues()
 
     if(!toggleAnalyticsDisplay.enabled)
     {
-        addGlobalStyle('div[role="group"] > div:has(> a[href$="/analytics"]) { display: none !important; }');
+        addGlobalStyle('div[role="group"] > div:has(> a[href$="/analytics"]) { display: none !important; }', "analyticsStyle");
     }
+    toggleNSFW.onChanged.addEventListener(toggleNSFW.name,(e) =>
+    {
+        toggle_nsfwBlurStyle(toggleNSFW.enabled);
+    });
+    toggle_nsfwBlurStyle(toggleNSFW.enabled);
+
 }
 
 async function setupToggles(sidePanel)
@@ -1438,7 +1492,7 @@ async function createToggleOption(sidePanel, toggleState, toggleText, toggleOnTe
             setUserPref(toggleState.name, toggleState.enabled);
             toggleState.onChanged.dispatchEvent(new CustomEvent(toggleState.name, {'detail':{'toggle':toggleState}}));
             toggleState.elem.innerHTML = toggleState.enabled ? toggleOnText : toggleOffText;
-        });
+        }, false);
 
         const footer = sidePanel.querySelector('nav').parentElement.appendChild(toggleState.elem);
     }
@@ -1448,29 +1502,29 @@ var blurShowText = "";
 
 async function processBlurButton(tweet)
 {
-    console.log("proc blur");
     const getBlurText = function(blur)
     {
         return blur.querySelector('span > span').innerText;
     }
 
-    const blurBtn = tweet.querySelector('div[role="button"][style*="backdrop-filter: blur"]');
+    const blurBtn = tweet.querySelector(nsfwBlurBtnQuery);
     if(blurBtn != null)
     {
-          console.log("found blur btn");
+     console.log(blurBtn);
         if(blurShowText == "")
         {
             blurShowText = getBlurText(blurBtn);
         }
         if(!toggleNSFW.enabled)
         {
+            console.log("blur click");
             blurBtn.click();
         }
         blurBtn.style.display = toggleNSFW.enabled ? "block" : "none";
 
         watchForChange(tweet, {attributes: false, childList: true, subtree: true}, (blurParent, mutes) => {
 
-            const curBlur = blurParent.querySelector('div[role="button"][style*="backdrop-filter: blur"]');
+            let curBlur = blurParent.querySelector(nsfwBlurBtnQuery);
             if(curBlur == null) { return; }
 
             if(!toggleNSFW.enabled && getBlurText(curBlur) == blurShowText)
@@ -1484,11 +1538,19 @@ async function processBlurButton(tweet)
             if(!addHasAttribute(curBlur, modifiedAttr))
             {
                 watchForChange(curBlur, {attributes:true, characterData: true, childList: true, subtree: true}, (blur, mutes) => {
-                    curBlur.style.display = toggleNSFW.enabled ? "block" : "none";
+                    curBlur = tweet.querySelector(nsfwBlurBtnQuery);
+                    if(curBlur)
+                    {
+                        curBlur.style.display = toggleNSFW.enabled ? "block" : "none";
+                    }
                 });
                 toggleNSFW.onChanged.addEventListener("nsfwToggleChanged", function(enabled) {
-                    curBlur?.click();
-                    curBlur.style.display = enabled ? "block" : "none";
+                    curBlur = tweet.querySelector(nsfwBlurBtnQuery);
+                    if(curBlur)
+                    {
+                        curBlur.click();
+                        curBlur.style.display = toggleNSFW.enabled ? "block" : "none";
+                    }
                 });
             }
 
@@ -1561,6 +1623,7 @@ async function onLayersChange(layers, mutation)
     {
 
         const contentContainer = Array.from(mutation.addedNodes)[0];
+        if(addHasAttribute(contentContainer, 'thd_modified')) { return; }
         const dialog = await awaitElem(contentContainer, 'div[role="dialog"]', argsChildAndSub);
 
         watchForComments(dialog);
@@ -1570,7 +1633,7 @@ async function onLayersChange(layers, mutation)
         const list = dialog.querySelector('ul[role="list"]');
         let id = getIDFromURL(window.location.href);
         let tweetData = tweets.get(id);
-        if(tweetData == null) { return; }
+        if(tweetData == null) { console.log("no tweet data: " + id); return; }
 
         if (list != null /* && !addHasAttribute(list, 'thd_modified')*/ )
         {
@@ -2306,17 +2369,44 @@ async function setUserPref(key, value)
 
 function LogMessage(text) { /*console.log(text);*/ }
 
-function addGlobalStyle(css)
+function addGlobalStyle(css, id)
 {
+    if(id && document.querySelector('#' + id)) { console.log("Style exists"); return; }
     let head, style;
     head = document.getElementsByTagName('head')[0];
     if (!head) { return; }
     style = document.createElement('style');
     style.type = 'text/css';
-    style.innerHTML = css;
+    if(id) { style.id = id; }
+    if (style.styleSheet) {
+        style.styleSheet.cssText = css;
+    } else
+    {
+        style.appendChild(document.createTextNode(css));
+    }
     head.appendChild(style);
     return style;
 }
+
+function removeGlobalStyle(id)
+{
+    let head, style;
+    head = document.getElementsByTagName('head')[0];
+    if (!head) { return; }
+    /*
+    if(styleElem == null){ return; }
+    let head, style;
+    head = document.getElementsByTagName('head')[0];
+    if (!head) { console.warn("Couldn't find HEAD element, style not removed, and likely doesn't exist anyways."); return; }
+    head.removeChild(styleElem);*/
+    let styleElem = document.querySelector('#' + id);
+    if(styleElem)
+    {
+        head.removeChild(styleElem);
+  console.log("removed style elem");
+    }
+}
+
 
 //<--> BEGIN PROCESSING <-->//
 
