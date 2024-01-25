@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.43
+// @version      2.45
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -1443,9 +1443,9 @@ function toggle_nsfwBlurStyle(enabled)
     if(!enabled)
     {
          //addGlobalStyle('div:has(> div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(> div > div > svg > g > path) { display: none !important; } div:has(> div > div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(div[data-testid="tweetPhoto"]) > div { filter: blur(0px) !important; }', "nsfwblur");
-        addGlobalStyle(`${nsfwBlurUIQuery} > div { display: none !important; } ${nsfwBlurFilterQuery} { filter: blur(0px) !important; }` +
-                       `div:has(> div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(> div > div > svg > g > path) { display: none !important; }`
-                        + `div:has(> div > div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(> div > div > div > svg > g > path):has(div[data-testid="tweetPhoto"]) > div { filter: blur(0px) !important; }` +
+        addGlobalStyle(//`${nsfwBlurUIQuery} > div { display: none !important; } ${nsfwBlurFilterQuery} { filter: blur(0px) !important; }` +
+                      // `div:has(> div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(> div > div > svg > g > path) { display: none !important; }`
+                      //  + `div:has(> div > div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(> div > div > div > svg > g > path):has(div[data-testid="tweetPhoto"]) > div { filter: blur(0px) !important; }` +
                         //Media thumb view overlay css target
                         `div[aria-label^="Timeline:"] div[data-testid="cellInnerDiv"] li[role="listitem"] div:has(> div > svg > g > path) > div:has(img) { filter: blur(0px) !important; }` +
                         //Media thumb view filter css target
