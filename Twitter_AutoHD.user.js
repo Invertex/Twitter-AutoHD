@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.45
+// @version      2.46
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -85,15 +85,17 @@ const sb = new StringBuilder("");
 const BuildM3U = function (lines)
 {
     const regex = /,BANDWIDTH=(.*),RESOLUTION/gm;
-
+    const regexAudio = /GROUP-ID="audio-(.*)",/gm;
     let bestLine = 0;
+    let bestAudioLine = 0;
     let bestBandwidth = 0;
+    let bestAudioBandwith = 0;
+
     sb.append(lines[0]);
 
     for (let i = 1; i < lines.length; i++)
     {
-        if (!lines[i].includes('STREAM-INF:')) { sb.append('#' + lines[i]); }
-        else
+        if (lines[i].includes('STREAM-INF:'))
         {
             let bandwidth = parseInt(regex.exec(lines[i]));
             if (bandwidth > bestBandwidth)
@@ -103,9 +105,24 @@ const BuildM3U = function (lines)
             }
             else if (bestLine === 0) { bestLine = i; } //failsafe in case something breaks with parsing down the line
         }
+        else if (lines[i].includes('EXT-X-MEDIA:NAME="Audio"'))
+        {
+            let bandwidth = parseInt(regexAudio.exec(lines[i]));
+            if (bandwidth > bestAudioBandwith)
+            {
+                bestAudioBandwith = bandwidth;
+                bestAudioLine = i;
+            }
+            else if (bestAudioLine === 0) { bestAudioLine = i; } //failsafe in case something breaks with parsing down the line
+        }
+        else
+        {
+            sb.append('#' + lines[i]);
+        }
     }
+    if (bestAudioLine > 0) { sb.append('#' + lines[bestAudioLine]); }
+    if (bestLine > 0) { sb.append('#' + lines[bestLine]); }
 
-    sb.append('#' + lines[bestLine]);
     let m3u = sb.toString();
     sb.clear();
 
@@ -177,7 +194,6 @@ function processXMLOpen(thisRef, method, url)
 
                 if (thisRef.readyState === 4)
                 {
-
                     const lines = e.target.responseText.split('#');
                     const m3u = BuildM3U(lines);
 
