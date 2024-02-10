@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.46
+// @version      2.48
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -324,7 +324,6 @@ function Tweet(tweetResult)
     this.id = data?.rest_id ?? data?.conversation_id;
     this.username = data?.core?.user_results?.result.legacy?.screen_name;
     this.url = "https://twitter.com/" + this.username + "/" + this.id;
-    this.tweetElem = null;
 
     tweets.set(this.id, this);
 
@@ -672,13 +671,12 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor, onHover
     return null;
 }
 
-function addBookmarkButton(tweetData)
+function addBookmarkButton(tweetElem, tweetData)
 {
-    let id = tweetData.id;
-    let tweet = tweetData.tweetElem;
-    if(tweet == null) { return; }
+	if(tweetElem == null) { return; }
 
-    let existingBookmark = tweet.querySelector('div[data-testid="bookmark"]');
+    let id = tweetData.id;
+    let existingBookmark = tweetElem.querySelector('div[data-testid="bookmark"]');
 
     if(existingBookmark != null)
     {
@@ -697,7 +695,7 @@ function addBookmarkButton(tweetData)
         }
     }
 
-    const btnCopy = getPostButtonCopy(tweet, "Bookmark", bookmarkSVG, "0 0 24 24", "#1c9bf0", "#1c9bf01a", (data)=>{}, (svgElem) => {onHoverStopped(svgElem, id);});
+    const btnCopy = getPostButtonCopy(tweetElem, "Bookmark", bookmarkSVG, "0 0 24 24", "#1c9bf0", "#1c9bf01a", (data)=>{}, (svgElem) => {onHoverStopped(svgElem, id);});
 
     if(btnCopy == null || btnCopy.btn == null) { return; }
     let btn = btnCopy.btn;
@@ -738,14 +736,14 @@ function addBookmarkButton(tweetData)
     btnCopy.btn.style += " -webkit-flex: 0.6 1.0; flex: 0.6 1.0;";;
 }
 
-async function addDownloadButton(tweetData, mediaInfo)
+async function addDownloadButton(tweetElem, tweetData, mediaInfo)
 {
     for(let i = mediaInfo.data.mediaNum - 1; i > 0; i--)
     {
         if(tweetData.media[i].isVideo) { return; }
     }
     let vidUrl = mediaInfo.data.contentURL;
-    const btnCopy = getPostButtonCopy(tweetData.tweetElem, "Download", dlSVG, "-80 -80 160 160", "#f3d607FF", "#f3d60720");
+    const btnCopy = getPostButtonCopy(tweetElem, "Download", dlSVG, "-80 -80 160 160", "#f3d607FF", "#f3d60720");
     if(btnCopy == null) { return; }
 
     const dlBtn = btnCopy.btn;
@@ -823,7 +821,7 @@ function updateElemPadding(panelCnt, background, imgContainerElem)
     }
 };
 
-function updateContentElement(tweetData, mediaInfo, elemIndex, elemCnt)
+function updateContentElement(tweetElem, tweetData, mediaInfo, elemIndex, elemCnt)
 {
     let mediaElem = mediaInfo.mediaElem;
     let tweetPhoto = mediaElem.closest('div[data-testid="tweetPhoto"]');
@@ -840,7 +838,7 @@ function updateContentElement(tweetData, mediaInfo, elemIndex, elemCnt)
 
     if(isVideo)
     {
-        addDownloadButton(tweetData, mediaInfo);
+        addDownloadButton(tweetElem, tweetData, mediaInfo);
         //Consistent video controls for GIF videos too
         if(mediaInfo.data.srcURL.includes('/tweet_video_thumb'))
         {
@@ -875,22 +873,49 @@ function updateContentElement(tweetData, mediaInfo, elemIndex, elemCnt)
     doOnAttributeChange(tweetPhoto, (container) => updateElemPadding(elemCnt, bg, container), true);
 }
 
-function updateContentElements(tweetData, mediaInfos)
+function updateContentElements(tweetElem, tweetData, mediaInfos)
 {
     if(tweetData == null || mediaInfos == null) { return; }
 
     let elemCnt = mediaInfos.length;
     for(let i = 0; i < elemCnt; i++)
     {
-        updateContentElement(tweetData, mediaInfos[i], i, elemCnt);
+        updateContentElement(tweetElem, tweetData, mediaInfos[i], i, elemCnt);
     }
 
-    updateContentLayout(tweetData, mediaInfos);
+    updateContentLayout(tweetElem, tweetData, mediaInfos);
 }
 
-function updateContentLayout(tweetData, mediaElems)
+function updatePadder(tweetElem, ratio)
 {
-     processBlurButton(tweetData.tweetElem);
+    const padder = tweetElem.querySelector('div[id^="id_"] div[style^="padding-bottom"]');
+
+    if(padder != null && padder.getAttribute("modifiedPadding") == null)
+    {
+        const modPaddingAttr = "modifiedPadding";
+        const padderParent = padder.parentElement;
+        const flexer = padder.closest('div[id^="id_"] > div');
+        const bg = flexer.querySelector('div[style^="background"] > div');
+
+        padder.style = `padding-bottom: ${ratio}%;`;
+        padder.setAttribute(modPaddingAttr, "");
+        padderParent.setAttribute(modPaddingAttr, "");
+        flexer.style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
+        if(bg) { bg.style.width = "100%"; }
+
+        padderParent.removeAttribute('style');
+
+        doOnAttributeChange(padder, (padderElem) => { if(padderElem.getAttribute("modifiedPadding") == null) { padderElem.style = "padding-bottom: " + (ratio) + "%;";} })
+        if(padderParent.getAttribute("modifiedPadding") == null)
+        {
+            doOnAttributeChange(padderParent, (padderParentElem) => { if(padderParentElem.getAttribute("modifiedPadding") == null) { padderParentElem.removeAttribute('style');} })
+        }
+    }
+}
+
+function updateContentLayout(tweetElem, tweetData, mediaElems)
+{
+     processBlurButton(tweetElem);
 
     let elemCnt = mediaElems.length;
 
@@ -933,7 +958,7 @@ function updateContentLayout(tweetData, mediaElems)
         if (imgToRatio.data.isVideo && imgToRatio.data.width > imgToRatio.data.height)
         {
             ratio = (img1.data.height + img2.data.height) / img1.data.width;
-            const padderly = tweetData.tweetElem.querySelector('div[id^="id_"] div[style^="padding-bottom"]');
+            const padderly = tweetElem.querySelector('div[id^="id_"] div[style^="padding-bottom"]');
             padderly.parentElement.lastElementChild.firstElementChild.style.flexDirection = "column";
         }
 
@@ -967,33 +992,9 @@ function updateContentLayout(tweetData, mediaElems)
         }
     }
 
-    const updatePadder = function()
-    {
-        const padder = tweetData.tweetElem.querySelector('div[id^="id_"] div[style^="padding-bottom"]');
 
-        if(padder != null && padder.getAttribute("modifiedPadding") == null)
-        {
-            const modPaddingAttr = "modifiedPadding";
-            const padderParent = padder.parentElement;
-            const flexer = padder.closest('div[id^="id_"] > div');
-            const bg = flexer.querySelector('div[style^="background"] > div');
-
-            padderParent.style = "";
-            padder.style = `padding-bottom: ${ratio}%;`;
-            padder.setAttribute(modPaddingAttr, "");
-            padderParent.setAttribute(modPaddingAttr, "");
-            flexer.style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
-            if(bg) { bg.style.width = "100%"; }
-
-            doOnAttributeChange(padder, (padderElem) => { if(padderElem.getAttribute("modifiedPadding") == null) { padderElem.style = "padding-bottom: " + (ratio) + "%;";} })
-            if(padderParent.getAttribute("modifiedPadding") == null)
-            {
-                doOnAttributeChange(padderParent, (padderParentElem) => { if(padderParentElem.getAttribute("modifiedPadding") == null) { padderParentElem.style = "";} })
-            }
-        }
-    }
-    updatePadder();
-    watchForChange(tweetData.tweetElem, argsChildAndSub, (tweet, mutes) => { updatePadder(); });
+    updatePadder(tweetElem, ratio);
+    watchForChange(tweetElem, argsChildAndSub, (tweet, mutes) => { updatePadder(tweetElem, ratio); });
 
 
  /*   for (let i = 0; i < elemCnt; i++)
@@ -1029,7 +1030,7 @@ function isAdvert(tweet)
     return false;
 }
 
-function processTweetContent(tweetData)
+function processTweetContent(tweet, tweetData)
 {
     let medias = tweetData.media;
     let elemsQuery = new Array(medias.length);
@@ -1043,11 +1044,11 @@ function processTweetContent(tweetData)
         if(!mediaData.isVideo)
         {
             let srcID = mediaData.srcURL.substring(mediaData.srcURL.lastIndexOf('/') + 1).split('?')[0].split('.')[0];
-            elemsQuery[i] = awaitElem(tweetData.tweetElem, `[src*="${srcID}"]`, argsChildAndSub);
+            elemsQuery[i] = awaitElem(tweet, `[src*="${srcID}"]`, argsChildAndSub);
         }
         else
         {
-            elemsQuery[i] = awaitElem(tweetData.tweetElem, `video[poster^="${mediaData.srcURL.split('?')[0]}"]`, argsChildAndSub);
+            elemsQuery[i] = awaitElem(tweet, `video[poster^="${mediaData.srcURL.split('?')[0]}"]`, argsChildAndSub);
         }
     }
 
@@ -1057,7 +1058,7 @@ function processTweetContent(tweetData)
         {
             mediaInfos[i].mediaElem = values[i];
         }
-        updateContentElements(tweetData, mediaInfos);
+        updateContentElements(tweet, tweetData, mediaInfos);
 
     });
 }
@@ -1080,13 +1081,13 @@ async function processTweet(tweet, tweetObserver)
     let tweetData = getTweetData(tweet);
     if(tweetData == null) { return; }
 
-    addBookmarkButton(tweetData);
+    addBookmarkButton(tweet, tweetData);
 
-    if(tweetData.hasMedia) { processTweetContent(tweetData); }
+    if(tweetData.hasMedia) { processTweetContent(tweet, tweetData); }
 
     if(tweetData.isQuote && tweetData.quote.hasMedia) {
         tweetData.quote.tweetElem = tweet;
-        processTweetContent(tweetData.quote);
+        processTweetContent(tweet, tweetData.quote);
     }
 }
 
@@ -1895,7 +1896,7 @@ async function updateContextMenuLink(tweetData, mediaInfo)
             }
             catch (err) { console.log(err); };
         };
-        ctxMenuCopyAddress.onclick = () => { copyAddress(dlURL) };
+        ctxMenuCopyAddress.onclick = (e) => { copyAddress(dlURL); };
         ctxMenuGRIS.onclick = () => { setContextMenuVisible(false);
                                      window.open("https://www.google.com/searchbyimage?sbisrc=cr_1_5_2&image_url=" + dlURL); };
     }
@@ -1914,30 +1915,31 @@ async function updateContextMenuLink(tweetData, mediaInfo)
 function addCustomCtxMenu(tweetData, mediaInfo, ctxTarget)
 {
     if (addHasAttribute(ctxTarget, "thd_customctx")) { return; }
+
     ctxTarget.addEventListener('contextmenu', function (e)
     {
         e.stopPropagation();
 
         let curSel = ctxMenu.getAttribute('selection');
 
-        if (wasShowDefaultContextClicked()) { selectedShowDefaultContext = false; return; } //Skip everything here and show default context menu
-        if(ctxMenu.style.display != "block" ||
-        (ctxMenu.style.display == "block" && (curSel == null ||
-                                              (curSel != null && curSel != mediaInfo.data.contentURL))))
+        if (wasShowDefaultContextClicked())
+        { //Skip everything here and show default context menu
+            selectedShowDefaultContext = false;
+            return;
+        }
+
+        e.preventDefault();
+
+        if(ctxMenu.style.display != "block" || (curSel == null || (curSel != null && curSel != mediaInfo.data.contentURL)))
         {
             updateContextMenuLink(tweetData, mediaInfo);
             setContextMenuVisible(true);
-            ctxMenu.style.left = mouseX(e) + "px";
-            ctxMenu.style.top = mouseY(e) + "px";
-            e.preventDefault();
+            ctxMenu.style.left = -12.0 + mouseX(e) + "px";
+            ctxMenu.style.top = -10.0 + mouseY(e) + "px";
         }
-        else
-        {
-            e.preventDefault();
-            setContextMenuVisible(false);
-        }
+        else { setContextMenuVisible(false); }
 
-    }, false);
+    }, {capture: true}, true);
 }
 
 //<--> TWITTER UTILITY FUNCTIONS <-->//
@@ -2047,7 +2049,7 @@ function getTweetData(tweet)
     let tweetData = tweets.get(id);
 
     if(tweetData == null) { return null; }
-    tweetData.tweetElem = tweet;
+
     return tweetData;
 }
 
