@@ -285,28 +285,37 @@ function stripVariants(variants)
 
 function Tweet(tweetResult)
 {
-    this.data = tweetResult;
-    if(this.data?.tweet != null){ this.data = this.data.tweet; } //If tweet is limited by who can comment, need to do this
+    let data = tweetResult;
+    if(data?.tweet != null){ data = data.tweet; } //If tweet is limited by who can comment, need to do this
 
-    this.isRetweet = this.data?.legacy?.retweeted_status_result?.result != null;
+    this.isRetweet = data?.legacy?.retweeted_status_result?.result != null;
     if(this.isRetweet)
     {
-        this.data = this.data.legacy.retweeted_status_result.result;
-        if(this.data?.tweet) { this.data = this.data.tweet; }
+        data = data.legacy.retweeted_status_result.result;
+        if(data?.tweet) { data = data.tweet; }
+
     }
-    this.legacy = this.data?.legacy ?? this.data; //Swapping to handle odd Explore page data
+
+    this.legacy = data?.legacy ?? data; //Swapping to handle odd Explore page data
     this.media = this.legacy?.extended_entities?.media;
     this.mediaBasic = this.legacy?.entities?.media;
     this.hasMedia = this.media != null;
 
-    this.quote = this.data?.quoted_status_result?.result;
+    this.quote = data?.quoted_status_result?.result;
     this.isQuote = this.quote != null;
     if(this.isQuote) { this.quote = new Tweet(this.quote); }
     this.quoteHasMedia = this.isQuote && this.quote.hasMedia;
-    this.id = this.data?.rest_id ?? this.data?.conversation_id;
-    this.username = this.data?.core?.user_results?.result.legacy?.screen_name;
+    this.id = data?.rest_id ?? data?.conversation_id;
+    this.username = data?.core?.user_results?.result.legacy?.screen_name;
     this.url = "https://twitter.com/" + this.username + "/" + this.id;
     this.tweetElem = null;
+
+    tweets.set(this.id, this);
+
+    if(data?.edit_control?.edit_tweet_ids != null)
+    {
+        data?.edit_control?.edit_tweet_ids.forEach((edit_id) => { tweets.set(edit_id, this); });
+    }
 
     this.bookmarked = function() { return this?.legacy?.bookmarked ?? false; };
     this.bookmark = function ()
@@ -356,7 +365,6 @@ function processExploreData(exploreTweets)
     {
         let exploreTweet = exploreTweets[i];
         let tweet = new Tweet(exploreTweet);
-        tweets.set(tweet.id, tweet);
 
         if(tweet.hasMedia)
         {
@@ -397,7 +405,6 @@ function processTimelineItem(item)
     if(result)
     {
         let tweet = new Tweet(result);
-        tweets.set(tweet.id, tweet);
 
         if(tweet.hasMedia)
         {
@@ -687,7 +694,7 @@ function addBookmarkButton(tweetData)
         e.stopPropagation();
         let tweetData = tweets.get(id);
 
-        if(tweetData == null) { console.log("Couldn't find tweet data for: " + id); return;}
+        if(tweetData == null) { return;}
         if(tweetData.bookmarked())
         {
             unbookmarkPost(id, (resp) =>
@@ -1648,7 +1655,6 @@ async function onLayersChange(layers, mutation)
 
     if (mutation.addedNodes != null && mutation.addedNodes.length > 0)
     {
-
         const contentContainer = Array.from(mutation.addedNodes)[0];
         if(addHasAttribute(contentContainer, 'thd_modified')) { return; }
         const dialog = await awaitElem(contentContainer, 'div[role="dialog"]', argsChildAndSub);
@@ -1660,7 +1666,7 @@ async function onLayersChange(layers, mutation)
         const list = dialog.querySelector('ul[role="list"]');
         let id = getIDFromURL(window.location.href);
         let tweetData = tweets.get(id);
-        if(tweetData == null) { console.log("no tweet data: " + id); return; }
+        if(tweetData == null) { return; }
 
         if (list != null /* && !addHasAttribute(list, 'thd_modified')*/ )
         {
@@ -2023,6 +2029,7 @@ function getTweetData(tweet)
     if (id == null) { return null; }
 
     let tweetData = tweets.get(id);
+
     if(tweetData == null) { return null; }
     tweetData.tweetElem = tweet;
     return tweetData;
