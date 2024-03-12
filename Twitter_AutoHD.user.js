@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.48
+// @version      2.5
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -57,7 +57,6 @@ addGlobalStyle('a[aria-label="Grok"], div > aside[aria-label*="Premium"], div[da
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
-
 //<--> TWEET PROCESSING <-->//
 function StringBuilder(value)
 {
@@ -82,32 +81,42 @@ StringBuilder.prototype.toString = function ()
 
 const sb = new StringBuilder("");
 
-const BuildM3U = function (lines)
+const filterVideoSources = function (m3u8)
 {
-    const regex = /,BANDWIDTH=(.*),RESOLUTION/gm;
-    const regexAudio = /GROUP-ID="audio-(.*)",/gm;
+    const regex = /(?<=,RESOLUTION=)(.*)(?=x)/gm;
+    const regexAudio = /(?<=GROUP-ID="audio-)(.*)(?=",)/gm;
     let bestLine = 0;
     let bestAudioLine = 0;
-    let bestBandwidth = 0;
+    let bestResolution = 0;
     let bestAudioBandwith = 0;
+    let avc1FallbackVideo = 0;
+
+    sb.clear();
+
+    let lines = m3u8.split('#');
 
     sb.append(lines[0]);
 
     for (let i = 1; i < lines.length; i++)
     {
-        if (lines[i].includes('STREAM-INF:'))
+        let line = lines[i];
+
+        if (line.includes('STREAM-INF:'))
         {
-            let bandwidth = parseInt(regex.exec(lines[i]));
-            if (bandwidth > bestBandwidth)
+            let resolution = parseInt(line.match(regex));
+            if (resolution > bestResolution)
             {
-                bestBandwidth = bandwidth;
+                bestResolution = resolution;
                 bestLine = i;
             }
             else if (bestLine === 0) { bestLine = i; } //failsafe in case something breaks with parsing down the line
+            //Twitter serves HEVC now and leaves just one low res avc1 fallback, so don't remove that fallback just in case...
+            if(line.includes('/avc1/')) { avc1FallbackVideo = i; }
         }
         else if (lines[i].includes('EXT-X-MEDIA:NAME="Audio"'))
         {
-            let bandwidth = parseInt(regexAudio.exec(lines[i]));
+            let bandwidth = parseInt(line.match(regexAudio));
+
             if (bandwidth > bestAudioBandwith)
             {
                 bestAudioBandwith = bandwidth;
@@ -120,13 +129,42 @@ const BuildM3U = function (lines)
             sb.append('#' + lines[i]);
         }
     }
-    if (bestAudioLine > 0) { sb.append('#' + lines[bestAudioLine]); }
-    if (bestLine > 0) { sb.append('#' + lines[bestLine]); }
 
-    let m3u = sb.toString();
-    sb.clear();
+    let doAVC1Fallback = bestLine > 0 && !lines[bestLine].includes('/avc1/') && avc1FallbackVideo > 0;
 
-    return m3u;
+    if (bestAudioLine > 0)
+    {
+        sb.append('#' + lines[bestAudioLine]);
+
+        if (doAVC1Fallback)
+        {
+            let avcLine = lines[avc1FallbackVideo];
+            let index = avcLine.indexOf('AUDIO="') + 7;
+
+            if(index > 8)
+            {
+                let audioGroup = avcLine.substr(index).split('"')[0];
+                for (let i = 1; i < lines.length; i++)
+                {
+                    let line = lines[i];
+                    if(line.includes('TYPE=AUDIO') && line.includes(audioGroup))
+                    {
+                        sb.append('#' + line);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+
+    if (bestLine > 0)
+    {
+        sb.append('#' + lines[bestLine]);
+        if (doAVC1Fallback) { sb.append('#' + lines[avc1FallbackVideo]); }
+    }
+
+    return sb.toString();
 };
 
 
@@ -194,8 +232,7 @@ function processXMLOpen(thisRef, method, url)
 
                 if (thisRef.readyState === 4)
                 {
-                    const lines = e.target.responseText.split('#');
-                    const m3u = BuildM3U(lines);
+                    const m3u = filterVideoSources(e.target.responseText);
 
                     Object.defineProperty(thisRef, 'response', { writable: true });
                     Object.defineProperty(thisRef, 'responseText', { writable: true });
@@ -934,7 +971,7 @@ function updateContentLayout(tweetElem, tweetData, mediaElems)
         let img2 = mediaElems[1];
         let img1Ratio = img1.data.height / img1.data.width;
         let img2Ratio = img2.data.height / img2.data.width;
-        var imgToRatio = img1Ratio > img2Ratio ? img1 : img2;
+        let imgToRatio = img1Ratio > img2Ratio ? img1 : img2;
         ratio = (imgToRatio.data.height / imgToRatio.data.width);
 
         img1.bgElem.style.backgroundSize = "cover";
@@ -1005,7 +1042,7 @@ function updateContentLayout(tweetElem, tweetData, mediaElems)
     }*/
 
     //Annoying Edge....edge-case. Have to find this random class name generated element and remove its align so that elements will expand fully into the feed column
-    var edgeCase = getCSSRuleContainingStyle('align-self', ['.r-'], 0, 'flex-start');
+    let edgeCase = getCSSRuleContainingStyle('align-self', ['.r-'], 0, 'flex-start');
     if (edgeCase != null)
     {
         edgeCase.style.setProperty('align-self', "inherit");
@@ -1632,7 +1669,7 @@ async function setupTrendingControls(trendingBox)
             toggle = createToggleButton(hideStr, "thd_toggleTrending");
             toggle.addEventListener('click', (e) =>
             {
-                var isHidden = toggle.innerText == hideStr;
+                let isHidden = toggle.innerText == hideStr;
                 setTrendingVisible(trendingBox, toggle, isHidden);
             });
             trendingTitle.appendChild(toggle);
@@ -1863,7 +1900,7 @@ async function updateContextMenuLink(tweetData, mediaInfo)
         setContextMenuVisible(false);
         if (GM_OpenInTabMissing)
         {
-            var lastWin = window;
+            let lastWin = window;
             window.open(url, '_blank');
             lastWin.focus();
         }
@@ -2371,27 +2408,27 @@ function addHasAttribute(elem, attr)
 
 function getCookie(name)
 {
-    var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    let match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
     if (match) { return match[2].toString(); }
     return null;
 }
 
 function getCSSRuleContainingStyle(styleName, selectors, styleCnt = 0, matchingValue = "")
 {
-    var sheets = document.styleSheets;
-    for (var i = 0, l = sheets.length; i < l; i++)
+    let sheets = document.styleSheets;
+    for (let i = 0, l = sheets.length; i < l; i++)
     {
-        var curSheet = sheets[i];
+        let curSheet = sheets[i];
 
         if (!curSheet.cssRules) { continue; }
 
-        for (var j = 0, k = curSheet.cssRules.length; j < k; j++)
+        for (let j = 0, k = curSheet.cssRules.length; j < k; j++)
         {
-            var rule = curSheet.cssRules[j];
+            let rule = curSheet.cssRules[j];
             if (styleCnt != 0 && styleCnt != rule.style.length) { return null; }
             if (rule.selectorText && rule.style.length > 0 /* && rule.selectorText.split(',').indexOf(selector) !== -1*/ )
             {
-                for (var s = 0; s < selectors.length; s++)
+                for (let s = 0; s < selectors.length; s++)
                 {
                     if (rule.selectorText.includes(selectors[s]) && rule.style[0] == styleName)
                     {
