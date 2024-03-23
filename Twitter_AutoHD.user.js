@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.61
+// @version      2.62
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -26,7 +26,6 @@
 
 const cooky = getCookie("ct0"); //Get our current Twitter session token so we can use Twitter API to request higher quality content
 const modifiedAttr = "THD_modified";
-const tweetQuery = 'div[data-testid="tweet"]';
 const GM_OpenInTabMissing = (typeof GM_openInTab === 'undefined');
 
 var tweets = new Map(); //Cache intercepted tweets data
@@ -212,96 +211,101 @@ unsafeWindow.XMLHttpRequest.prototype.open = exportFunction(function(method, url
     openOpen.call(this, method, url);
 }, unsafeWindow);
 
-
 (function (open)
 {
     XMLHttpRequest.prototype.open = function (method, url)
     {
-        processXMLOpen(this, method, url);
-
-        open.apply(this, arguments);
+         processXMLOpen(this, method, url);
+         open.apply(this, arguments);
     };
 })(XMLHttpRequest.prototype.open);
 
+
 function processXMLOpen(thisRef, method, url)
 {
-        if (url.includes('video.twimg.com') && url.includes('.m3u8?'))
+    if(prefsLoaded === false) {
+        loadToggleValues();
+    }
+
+    if ((url.includes('video.twimg.com') || url.includes('master_dynamic')) && url.includes('.m3u8?'))
+    {
+        thisRef.addEventListener('readystatechange', function (e)
         {
-            thisRef.addEventListener('readystatechange', function (e)
+            if (toggleHQVideo.enabled && thisRef.readyState === 4)
             {
+                const m3u = filterVideoSources(e.target.responseText);
 
-                if (thisRef.readyState === 4)
+                Object.defineProperty(thisRef, 'response', { writable: true });
+                Object.defineProperty(thisRef, 'responseText', { writable: true });
+                thisRef.response = thisRef.responseText = m3u;
+            }
+        });
+    }
+    else if(url.includes('show.json?'))
+    {
+        thisRef.addEventListener('readystatechange', function (e)
+        {
+            if (toggleHQVideo.enabled && thisRef.readyState === 4)
+            {
+                let json = JSON.parse(e.target.response);
+                let vidInfo = json.extended_entities?.media?.video_info ?? null;
+
+                if(vidInfo != null && vidInfo.variants != null && vidInfo.variants.length > 1)
                 {
-                    const m3u = filterVideoSources(e.target.responseText);
+                    vidInfo.variants = [stripVariants(vidInfo.variants)];
 
-                    Object.defineProperty(thisRef, 'response', { writable: true });
                     Object.defineProperty(thisRef, 'responseText', { writable: true });
-                    thisRef.response = thisRef.responseText = m3u;
+                    thisRef.responseText = JSON.stringify(json);
                 }
-            });
-        }
-        else if(url.includes('show.json?'))
+            }
+        });
+    }
+    else if(url.includes('/Home') || url.includes('includePromotedContent') || url.includes('ListLatestTweetsTimeline') || url.includes('/UserMedia'))
+    {
+        url = url.replace('includePromotedContent%22%3Atrue', 'includePromotedContent%22%3Afalse');
+        url = url.replace('phone_label_enabled%22%3Afalse', 'phone_label_enabled%22%3Atrue');
+        url = url.replace('reach_fetch_enabled%22%3Atrue', 'reach_fetch_enabled%22%3Afalse');
+        url = url.replace('withQuickPromoteEligibilityTweetFields%22%3Atrue', 'withQuickPromoteEligibilityTweetFields%22%3Afalse');
+        url = url.replace('article_tweet_consumption_enabled%22%3Atrue', 'article_tweet_consumption_enabled%22%3Afalse');
+        url = url.replace('count%22%3A20', 'count%22%3A30');
+
+        thisRef.addEventListener('readystatechange', function (e)
         {
-            thisRef.addEventListener('readystatechange', function (e)
+            if (thisRef.readyState === 4)
             {
+                let json = null;
 
-                if (thisRef.readyState === 4)
-                {
-                    let json = JSON.parse(e.target.response);
-                    let vidInfo = json.extended_entities?.media?.video_info ?? null;
-
-                    if(vidInfo != null && vidInfo.variants != null && vidInfo.variants.length > 1)
-                    {
-                        vidInfo.variants = [stripVariants(vidInfo.variants)];
-
-                        Object.defineProperty(thisRef, 'responseText', { writable: true });
-                        thisRef.responseText = JSON.stringify(json);
-                    }
+                try {
+                    json = JSON.parse(e.target.response);
+                } catch(e) {
+                    console.log("Empty response, Twitter code is bad, let's refresh.");
+                    window.location.href = window.location.href;
+                    return;
                 }
-            });
-        }
 
-        else if(url.includes('/Home') || url.includes('includePromotedContent') || url.includes('ListLatestTweetsTimeline') || url.includes('/UserMedia'))
+                if(json?.data != null)
+                {
+                    processTimelineData(json);
+
+                    Object.defineProperty(thisRef, 'responseText', { writable: true });
+
+                    thisRef.responseText = JSON.stringify(json);
+                }
+            }
+        });
+    }
+    else if(url.includes('/videoads/'))
+    {
+         thisRef.addEventListener('readystatechange', function (e)
         {
-            url = url.replace('includePromotedContent%22%3Atrue', 'includePromotedContent%22%3Afalse');
-            url = url.replace('phone_label_enabled%22%3Afalse', 'phone_label_enabled%22%3Atrue');
-            url = url.replace('reach_fetch_enabled%22%3Atrue', 'reach_fetch_enabled%22%3Afalse');
-            url = url.replace('withQuickPromoteEligibilityTweetFields%22%3Atrue', 'withQuickPromoteEligibilityTweetFields%22%3Afalse');
-            url = url.replace('article_tweet_consumption_enabled%22%3Atrue', 'article_tweet_consumption_enabled%22%3Afalse');
-            url = url.replace('count%22%3A20', 'count%22%3A30');
-
-            thisRef.addEventListener('readystatechange', function (e)
+            if (thisRef.readyState === 4)
             {
-                if (thisRef.readyState === 4)
-                {
-                    let json;
-
-                    try{
-                        json = JSON.parse(e.target.response);
-                    } catch(e) {
-                        console.log("Empty response, Twitter code is bad, let's refresh.");
-                        window.location.href = window.location.href;
-                        return;
-                    }
-                    if(json.data)
-                    {
-                        processTimelineData(json);
-
-                        Object.defineProperty(thisRef, 'responseText', { writable: true });
-
-                        thisRef.responseText = JSON.stringify(json);
-                    }
-                    else if(json.data.threaded_conversation_with_injections_v2)
-                    {
-                        json.data.threaded_conversation_with_injections_v2.instructions[0].entries = processTweetsQuery(json.data.threaded_conversation_with_injections_v2.instructions[0].entries);
-                        Object.defineProperty(thisRef, 'responseText', { writable: true });
-
-                        thisRef.responseText = JSON.stringify(json);
-                    }
-                }
-            })
-        }
-     /*   else if(url.includes('guide.json')) //Explore
+                    Object.defineProperty(thisRef, 'responseText', { writable: true });
+                    thisRef.responseText = "{}";
+            }
+        });
+    }
+    /*   else if(url.includes('guide.json')) //Explore
         {
              this.addEventListener('readystatechange', function (e)
             {
@@ -318,16 +322,6 @@ function processXMLOpen(thisRef, method, url)
         }*/
 }
 
-function isTweetBookmarked(id)
-{
-    let tweet = tweets.get(id);
-    if(tweet)
-    {
-        return tweet.bookmarked;
-    }
-    return false;
-}
-
 function stripVariants(variants)
 {
     if(variants == null) { return null; }
@@ -336,79 +330,163 @@ function stripVariants(variants)
     return variants[0];
 }
 
-function Tweet(tweetResult)
+function processMediaResponseData(mediasJson)
 {
-    let data = tweetResult;
-    if(data?.tweet != null){ data = data.tweet; } //If tweet is limited by who can comment, need to do this
+    let hqVideo = toggleHQVideo.enabled;
+    let hqImg = toggleHQImg.enabled;
 
-    this.isRetweet = data?.legacy?.retweeted_status_result?.result != null;
-    if(this.isRetweet)
+    mediasJson.forEach((mediaItem) =>
     {
-        data = data.legacy.retweeted_status_result.result;
-        if(data?.tweet) { data = data.tweet; }
+        if(hqVideo === true && mediaItem.type === 'video'){
+            mediaItem.video_info.variants = [stripVariants(mediaItem.video_info.variants)];
+        }
+        else if(hqImg === true && mediaItem.type == 'photo')
+        {
+            mediaItem.media_url_https = getHighQualityImage(mediaItem.media_url_https);
+        }
+    });
+}
 
+class Tweet
+{
+    constructor(tweetResult)
+    {
+        let data = tweetResult;
+        if(data?.tweet != null){ data = data.tweet; } //If tweet is limited by who can comment, need to do this
+
+        this.isRetweet = data?.legacy?.retweeted_status_result?.result != null;
+        if(this.isRetweet)
+        {
+            data = data.legacy.retweeted_status_result.result;
+            if(data?.tweet) { data = data.tweet; }
+
+        }
+
+        this.id = data?.rest_id ?? data?.conversation_id;
+        let legacy = data?.legacy ?? data; //Swapping to handle odd Explore page data
+
+        this.media = legacy?.extended_entities?.media;
+        this.hasMedia = this.media != null;
+
+        this.quote = data?.quoted_status_result?.result;
+        this.isQuote = this.quote != null;
+        if(this.isQuote) { this.quote = new Tweet(this.quote); }
+        this.quoteHasMedia = this.isQuote && this.quote.hasMedia;
+
+        this.username = data?.core?.user_results?.result.legacy?.screen_name;
+        this.url = "https://twitter.com/" + this.username + "/" + this.id;
+
+        if(this.hasMedia === true)
+        {
+            if(this.media != null) { processMediaResponseData(this.media);}
+            if(this.isQuote === true && this.quoteHasMedia === true) { processMediaResponseData(this.quote.media); }
+        }
+        else if(data?.card?.legacy != null)
+        {
+            let cardLegacy = data.card.legacy;
+            if(cardLegacy.binding_values != null)
+            {
+                for(let i = 0; i < cardLegacy.binding_values.length; i++)
+                {
+                    let bv = cardLegacy.binding_values[i];
+                    if(bv.key === "unified_card")
+                    {
+                        let cardValue = bv.value;
+                        if(cardValue?.type != "STRING") { break; }
+
+                        let valueJson = JSON.parse(cardValue.string_value);
+
+                        valueJson.type = "video"; //Preventing clicking on video opening up a new tab, blocks recent exploits and overall better UX
+                        if(valueJson.components.length > 0)
+                        {
+                            this.media = [];
+                            let hqVideo = toggleHQVideo.enabled;
+                            valueJson.components.forEach((comp) => {
+                                if(comp.startsWith("media_"))
+                                {
+                                    let compData = valueJson.component_objects[comp].data;
+                                    let mediaId = compData.id;
+                                    let destination = valueJson.destination_objects[compData.destination].data.url_data;
+                                    destination.vanity = destination.url.substr(0, 40);
+                                    let mediaData = valueJson.media_entities[mediaId];
+                                    if(hqVideo === true && mediaData.video_info != null)
+                                    {
+                                        let bestVariant = stripVariants(mediaData.video_info.variants);
+                                        mediaData.video_info.variants = [bestVariant];
+                                    }
+                                    this.media.push(mediaData);
+                                }
+                                if(comp.startsWith("details_"))
+                                {
+                                    let compData = valueJson.component_objects[comp].data;
+
+                                    let destination = valueJson.destination_objects[compData.destination].data.url_data;
+                                    destination.vanity = destination.url.substr(0, 90);
+                                }
+                            });
+
+                            this.hasMedia = this.media.length > 0;
+                            cardValue.string_value = JSON.stringify(valueJson);
+                        }
+                    }
+                }
+            }
+        }
+
+        tweets.set(this.id, this);
+
+        if(data?.edit_control?.edit_tweet_ids != null)
+        {
+            data?.edit_control?.edit_tweet_ids.forEach((edit_id) => { tweets.set(edit_id, this); });
+        }
+
+        this.isBookmarked = legacy?.bookmarked ?? false;
     }
 
-    this.legacy = data?.legacy ?? data; //Swapping to handle odd Explore page data
-    this.media = this.legacy?.extended_entities?.media;
-    this.mediaBasic = this.legacy?.entities?.media;
-    this.hasMedia = this.media != null;
+    get bookmarked() { return this.isBookmarked; };
+    bookmark() { this.isBookmarked = true; }
+    unbookmark() { this.isBookmarked = false; }
 
-    this.quote = data?.quoted_status_result?.result;
-    this.isQuote = this.quote != null;
-    if(this.isQuote) { this.quote = new Tweet(this.quote); }
-    this.quoteHasMedia = this.isQuote && this.quote.hasMedia;
-    this.id = data?.rest_id ?? data?.conversation_id;
-    this.username = data?.core?.user_results?.result.legacy?.screen_name;
-    this.url = "https://twitter.com/" + this.username + "/" + this.id;
-
-    tweets.set(this.id, this);
-
-    if(data?.edit_control?.edit_tweet_ids != null)
-    {
-        data?.edit_control?.edit_tweet_ids.forEach((edit_id) => { tweets.set(edit_id, this); });
-    }
-
-    this.bookmarked = function() { return this?.legacy?.bookmarked ?? false; };
-    this.bookmark = function ()
-    {
-        if(this.legacy?.bookmarked != null)
-        {
-            this.legacy.bookmarked = true;
-        }
-    };
-    this.unbookmark = function ()
-    {
-        if(this.legacy?.bookmarked != null)
-        {
-            this.legacy.bookmarked = false;
-        }
-    };
-    this.getMediaData = function(index)
+    getMediaData = function(index)
     {
         if(this.media == null || this.media.length <= index) { return null; }
 
         let mediaItem = this.media[index];
+
+        let username = this.username;
+        let id = this.id;
+        let media_id = mediaItem.id_str;
+        let media_url = mediaItem.media_url_https;
         let url = mediaItem.expanded_url;
         let comIndex = url.indexOf('.com/');
         let urlParts = url.substring(comIndex < 0 ? 0 : comIndex + 5).split('/');
-        if(urlParts.length < 4) { return null; }
+        if(urlParts.length > 3)
+        {
+            username = urlParts[0];
+            id = urlParts[2];
+        }
+
+        let isVideo = mediaItem.type == 'video' || media_url.includes('/tweet_video_thumb/');
+        let isPhoto = mediaItem.type == 'photo';
         let counter = this.media.length < 2 ? -1 : index + 1;
-        let srcURL = mediaItem.media_url_https;
-        let contentURL = stripVariants(mediaItem?.video_info?.variants)?.url ?? srcURL;
 
         return {
-            username: urlParts[0],
-            id: urlParts[2],
+            username: username,
+            id: id,
+            media_id: media_id,
+            media_url: media_url,
             mediaNum: counter,
-            srcURL: srcURL,
-            contentURL: contentURL,
+            isVideo: isVideo,
+            isPhoto: isPhoto,
+            getContentURL: () => {
+                if(isVideo) { return stripVariants(mediaItem.video_info.variants).url; }
+                return getHighQualityImage(media_url);
+            },
             type: mediaItem.type,
-            isVideo: mediaItem.type == 'video' || srcURL.includes('/tweet_video_thumb/'),
             width: mediaItem.original_info.width,
             height: mediaItem.original_info.height
         };
-    };
+    }
 }
 
 function processExploreData(exploreTweets)
@@ -417,35 +495,6 @@ function processExploreData(exploreTweets)
     {
         let exploreTweet = exploreTweets[i];
         let tweet = new Tweet(exploreTweet);
-
-        if(tweet.hasMedia)
-        {
-            processResponseMedia(tweet.media);
-            processResponseMedia(tweet.mediaBasic);
-        }
-        if(tweet.isQuote && tweet.quoteHasMedia)
-        {
-            processResponseMedia(tweet.quote.media);
-            processResponseMedia(tweet.quote.mediaBasic);
-        }
-    }
-}
-
-function processResponseMedia(medias)
-{
-    if(medias == null){ return; }
-
-    for(let i = 0; i < medias.length; i++)
-    {
-        let media = medias[i];
-        if(media.type == 'photo')
-        {
-            media.media_url_https = getHighQualityImage(media.media_url_https);
-        }
-      /*  else if (media.type == 'video')
-        {
-            media.video_info.variants = [stripVariants(media.video_info.variants)];
-        }*/
     }
 }
 
@@ -457,17 +506,6 @@ function processTimelineItem(item)
     if(result)
     {
         let tweet = new Tweet(result);
-
-        if(tweet.hasMedia)
-        {
-            processResponseMedia(tweet.media);
-            processResponseMedia(tweet.mediaBasic);
-        }
-        if(tweet.isQuote && tweet.quoteHasMedia)
-        {
-            processResponseMedia(tweet.quote.media);
-            processResponseMedia(tweet.quote.mediaBasic);
-        }
     }
 
     return true;
@@ -727,7 +765,7 @@ function addBookmarkButton(tweetElem, tweetData)
     let onHoverStopped = function(svgElem, tweetID)
     {
          let tweetData = tweets.get(tweetID);
-        if(tweetData && tweetData.bookmarked()) {
+        if(tweetData && tweetData.bookmarked) {
             $(svgElem).css("color", "#1c9bf0FF");
         }
     }
@@ -746,7 +784,7 @@ function addBookmarkButton(tweetElem, tweetData)
         let tweetData = tweets.get(id);
 
         if(tweetData == null) { return;}
-        if(tweetData.bookmarked())
+        if(tweetData.bookmarked)
         {
             unbookmarkPost(id, (resp) =>
             {
@@ -779,7 +817,7 @@ async function addDownloadButton(tweetElem, tweetData, mediaInfo)
     {
         if(tweetData.media[i].isVideo) { return; }
     }
-    let vidUrl = mediaInfo.data.contentURL;
+
     const btnCopy = getPostButtonCopy(tweetElem, "Download", dlSVG, "-80 -80 160 160", "#f3d607FF", "#f3d60720");
     if(btnCopy == null) { return; }
 
@@ -790,14 +828,13 @@ async function addDownloadButton(tweetElem, tweetData, mediaInfo)
     let isIframe = btnCopy.inIframe;
     const filename = filenameFromMediaData(mediaInfo.data);
 
-    dlBtn.href = vidUrl;
     const linkElem = dlBtn
 
     if (isIframe)
     {
         let classy = dlBtn.className;
         dlBtn.className = "";
-        linkElem = $(dlBtn).wrapAll(`<a href="${vidUrl}" download="${filename}" style=""></a>`)[0].parentElement;
+        linkElem = $(dlBtn).wrapAll(`<a href="${mediaInfo.data.getContentURL()}" download="${filename}" style=""></a>`)[0].parentElement;
         linkElem.setAttribute('download', filename);
         dlBtn.querySelector('div[dir="auto"] > span').innerText = "Download";
         btnCopy.btn = $(linkElem).wrapAll(`<div class="${classy}"></a>`)[0].parentElement;
@@ -810,9 +847,12 @@ async function addDownloadButton(tweetElem, tweetData, mediaInfo)
     }
 
 
-    $(linkElem).click(function (e) { e.preventDefault();
+    $(linkElem).click(function (e) {
+        e.preventDefault();
         e.stopPropagation();
-        download(vidUrl, filename); });
+        let dlurl = mediaInfo.data.getContentURL();
+        download(dlurl, filename);
+    });
 
     btnCopy.btn.className = btnCopy.origBtn.className;
     btnCopy.btn.style += " -webkit-flex: 0.6 1.0; flex: 0.6 1.0; justify-content: center !important;";;
@@ -861,7 +901,7 @@ function updateElemPadding(panelCnt, background, imgContainerElem)
 function updateContentElement(tweetElem, tweetData, mediaInfo, elemIndex, elemCnt)
 {
     let mediaElem = mediaInfo.mediaElem;
-    let tweetPhoto = mediaElem.closest('div[data-testid="tweetPhoto"]');
+    let tweetPhoto = mediaElem.closest('div[data-testid="tweetPhoto"],div[data-testid^="card.wrapper"]');
     const flexDir = $(tweetPhoto).css('flex-direction');
     const isVideo = mediaInfo.data.isVideo;
     let bg = isVideo ? mediaElem.parentElement : tweetPhoto.querySelector('div[style^="background-image"]');
@@ -877,7 +917,7 @@ function updateContentElement(tweetElem, tweetData, mediaInfo, elemIndex, elemCn
     {
         addDownloadButton(tweetElem, tweetData, mediaInfo);
         //Consistent video controls for GIF videos too
-        if(mediaInfo.data.srcURL.includes('/tweet_video_thumb'))
+        if(mediaInfo.data.media_url.includes('/tweet_video_thumb'))
         {
             mediaElem.removeAttribute('controls');
             mediaElem.onplaying = (e) => { if(!mediaElem.paused && !mediaElem.getAttribute("isHovering")) { mediaElem.removeAttribute('controls'); } };
@@ -898,9 +938,10 @@ function updateContentElement(tweetElem, tweetData, mediaInfo, elemIndex, elemCn
             }
         }
     }
-    else if(mediaElem.src != mediaInfo.data.contentURL)
+    else if(toggleHQImg.enabled === true)
     {
-        updateImgSrc(mediaElem, bg, mediaInfo.data.contentURL);
+        let hqImg = mediaInfo.data.getContentURL();
+        updateImgSrc(mediaElem, bg, hqImg);
     }
 
     addCustomCtxMenu(tweetData, mediaInfo, mediaInfo.linkElem);
@@ -1067,7 +1108,10 @@ function isAdvert(tweet)
     return false;
 }
 
-function processTweetContent(tweet, tweetData)
+const mediaInfoBuffer = [8];
+const elemsQueryBuffer = [8];
+
+async function processTweetContent(tweet, tweetData)
 {
     let medias = tweetData.media;
     let elemsQuery = new Array(medias.length);
@@ -1076,17 +1120,19 @@ function processTweetContent(tweet, tweetData)
     for(let i = 0; i < medias.length; i++)
     {
         let mediaData = tweetData.getMediaData(i);
+
         mediaInfos[i] = { data: mediaData, mediaElem: null, linkElem: null, tweetPhotoElem: null, bgElem: null, flex: null };
 
-        if(!mediaData.isVideo)
+        if(mediaData.isPhoto === true)
         {
-            let srcID = mediaData.srcURL.substring(mediaData.srcURL.lastIndexOf('/') + 1).split('?')[0].split('.')[0];
+            let srcID = mediaData.media_url.substring(mediaData.media_url.lastIndexOf('/') + 1).split('?')[0].split('.')[0];
             elemsQuery[i] = awaitElem(tweet, `[src*="${srcID}"]`, argsChildAndSub);
         }
         else
         {
-            elemsQuery[i] = awaitElem(tweet, `video[poster^="${mediaData.srcURL.split('?')[0]}"]`, argsChildAndSub);
+            elemsQuery[i] = awaitElem(tweet, `video[poster^="${mediaData.media_url.split('?')[0]}"]`, argsChildAndSub);
         }
+
     }
 
     Promise.all(elemsQuery).then((values) =>
@@ -1307,7 +1353,6 @@ function onTimelineChange(addedNodes)
     {
         //   if(addHasAttribute(child, modifiedAttr)) { return; }
         awaitElem(child, 'ARTICLE', argsChildAndSub).then(listenForMediaType);
-        //  awaitElem(child, 'ARTICLE,ARTICLE '+ tweetQuery, argsChildAndSub).then(tweet => { listenForMediaType(tweet.parentElement); })
     });
 }
 
@@ -1459,6 +1504,7 @@ const usePref_lastTopicsClearTime = "thd_lastTopicsClearTime";
 
 var toggleNSFW;
 var toggleHQImg;
+var toggleHQVideo;
 var toggleLiked;
 var toggleFollowed;
 var toggleRetweet;
@@ -1468,6 +1514,8 @@ var toggleTimelineScaling;
 var toggleAnalyticsDisplay;
 var toggleDisableForYou;
 var toggleMakeLinksVX;
+
+var prefsLoaded = false;
 
 async function watchSideBar(main)
 {
@@ -1522,8 +1570,11 @@ function toggle_nsfwBlurStyle(enabled)
 
 async function loadToggleValues()
 {
+    if(prefsLoaded === true) { return; }
+
     toggleNSFW = await getToggleObj("thd_blurNSFW", false);
     toggleHQImg = await getToggleObj("thd_toggleHQImg", true);
+    toggleHQVideo = await getToggleObj("thd_toggleHQVideo", true);
     toggleLiked = await getToggleObj("thd_toggleLiked", true);
     toggleFollowed = await getToggleObj("thd_toggleFollowed", false);
     toggleRetweet = await getToggleObj("thd_toggleRetweet", false);
@@ -1534,6 +1585,7 @@ async function loadToggleValues()
     toggleDisableForYou = await getToggleObj("thd_toggleDisableForYou", false);
     toggleMakeLinksVX = await getToggleObj("thd_makeLinksVX", true);
 
+    prefsLoaded = true;
 
     if(!toggleAnalyticsDisplay.enabled)
     {
@@ -1544,13 +1596,13 @@ async function loadToggleValues()
         toggle_nsfwBlurStyle(toggleNSFW.enabled);
     });
     toggle_nsfwBlurStyle(toggleNSFW.enabled);
-
 }
 
 async function setupToggles(sidePanel)
 {
     createToggleOption(sidePanel, toggleNSFW, "NSFW Blur: ", "ON", "OFF");
     createToggleOption(sidePanel, toggleHQImg, "HQ Image Loading: ", "ON", "OFF");
+    createToggleOption(sidePanel, toggleHQVideo, "HQ Video Loading: ", "ON", "OFF");
     createToggleOption(sidePanel, toggleTimelineScaling, "Timeline Width Scaling: ", "ON", "OFF");
     createToggleOption(sidePanel, toggleMakeLinksVX, "Replace Links with VX Link: ", "ON", "OFF");
     createToggleOption(sidePanel, toggleLiked, "Liked Tweets: ", "ON", "OFF");
@@ -1752,13 +1804,12 @@ async function updateFullViewImage(ctxTarget, tweetData, mediaData)
   //  if (addHasAttribute(img, "thd_modified")) { return; }
     let bg = ctxTarget.parentElement.querySelector('div') ?? ctxTarget.parentElement;
 
-    let hqSrc = mediaData.contentURL;
     let mediaInfo = { data: mediaData, linkElem: ctxTarget, mediaElem: ctxTarget };
-   //  let hqSrc = img.src;
 
     addCustomCtxMenu(tweetData, mediaInfo, ctxTarget);
-    if(!mediaData.isVideo)
+    if(toggleHQImg.enabled === true && !mediaData.isVideo === true)
     {
+        let hqSrc = mediaData.getContentURL();
         updateImgSrc(ctxTarget, bg, hqSrc);
         doOnAttributeChange(ctxTarget, (ctxTarg) => { updateImgSrc(ctxTarg, bg, hqSrc); }, false);
     }
@@ -1871,8 +1922,7 @@ async function updateContextMenuLink(tweetData, mediaInfo)
 {
     if(mediaInfo == null) { return; }
 
-    let dlURL = mediaInfo.data.contentURL;
-    ctxMenu.setAttribute('selection', dlURL);
+    ctxMenu.setAttribute('selection', mediaInfo.data.media_id);
 
     let isImage = mediaInfo.mediaElem.tagName.toLowerCase() == "img";
 
@@ -1913,8 +1963,8 @@ async function updateContextMenuLink(tweetData, mediaInfo)
     {
         mediaInfo.mediaElem.crossOrigin = 'Anonymous'; //Needed to avoid browser preventing the Canvas from being copied when doing "Copy Image"
 
-        ctxMenuOpenInNewTab.onclick = () => { openInNewTab(dlURL) };
-        ctxMenuSaveAs.onclick = () => { saveMedia(dlURL) };
+        ctxMenuOpenInNewTab.onclick = () => { openInNewTab(mediaInfo.data.getContentURL()) };
+        ctxMenuSaveAs.onclick = () => { saveMedia(mediaInfo.data.getContentURL()) };
 
         ctxMenuCopyImg.onclick = () =>
         {
@@ -1933,15 +1983,15 @@ async function updateContextMenuLink(tweetData, mediaInfo)
             }
             catch (err) { console.log(err); };
         };
-        ctxMenuCopyAddress.onclick = (e) => { copyAddress(dlURL); };
+        ctxMenuCopyAddress.onclick = (e) => { copyAddress(mediaInfo.data.getContentURL()); };
         ctxMenuGRIS.onclick = () => { setContextMenuVisible(false);
-                                     window.open("https://www.google.com/searchbyimage?sbisrc=cr_1_5_2&image_url=" + dlURL); };
+                                     window.open("https://www.google.com/searchbyimage?sbisrc=cr_1_5_2&image_url=" + mediaInfo.data.getContentURL()); };
     }
     else //Video
     {
-        ctxMenuOpenVidInNewTab.onclick = () => { openInNewTab(dlURL) };
-        ctxMenuSaveAsVid.onclick = () => { saveMedia(dlURL) };
-        ctxMenuCopyVidAddress.onclick = () => { copyAddress(dlURL) };
+        ctxMenuOpenVidInNewTab.onclick = () => { openInNewTab(mediaInfo.data.getContentURL()) };
+        ctxMenuSaveAsVid.onclick = () => { saveMedia(mediaInfo.data.getContentURL()) };
+        ctxMenuCopyVidAddress.onclick = () => { copyAddress(mediaInfo.data.getContentURL()) };
     }
 
     //Generic Stuff
@@ -1967,7 +2017,7 @@ function addCustomCtxMenu(tweetData, mediaInfo, ctxTarget)
 
         e.preventDefault();
 
-        if(ctxMenu.style.display != "block" || (curSel == null || (curSel != null && curSel != mediaInfo.data.contentURL)))
+        if(ctxMenu.style.display != "block" || (curSel == null || (curSel != null && curSel != mediaInfo.data.media_id)))
         {
             updateContextMenuLink(tweetData, mediaInfo);
             setContextMenuVisible(true);
@@ -2230,7 +2280,7 @@ async function clearTopicsAndInterests(force = false)
             "x-twitter-auth-type": "OAuth2Session",
             "x-twitter-client-language": "en"
         },
-        "referrer": "https://twitter.com/invert_x/topics/followed",
+        "referrer": window.location.href, //test if this is fine...  had hardcoded url here before
         "referrerPolicy": "strict-origin-when-cross-origin",
         "body": null,
         "method": "GET",
@@ -2389,10 +2439,10 @@ async function awaitElem(root, query, obsArguments)
 
 function doOnAttributeChange(elem, onChange, repeatOnce = false)
 {
-    let rootObserver = new MutationObserver((mutes, obvs) =>
+    let rootObserver = new MutationObserver((mutes, obvs) => async function()
     {
         obvs.disconnect();
-        onChange(elem);
+        await onChange(elem);
         if (repeatOnce == true) { return; }
         obvs.observe(elem, { childList: false, subtree: false, attributes: true })
     });
