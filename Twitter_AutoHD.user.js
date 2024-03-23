@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.62
+// @version      2.63
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -906,7 +906,7 @@ function updateContentElement(tweetElem, tweetData, mediaInfo, elemIndex, elemCn
     const isVideo = mediaInfo.data.isVideo;
     let bg = isVideo ? mediaElem.parentElement : tweetPhoto.querySelector('div[style^="background-image"]');
 
-    let linkElem = tweetPhoto.querySelector('div[data-testid="videoPlayer"]') ?? mediaElem.closest('a');
+    let linkElem = tweetPhoto.querySelector('div[data-testid="videoPlayer"]') ?? mediaElem?.closest('a');
 
     mediaInfo.tweetPhotoElem = tweetPhoto;
     mediaInfo.linkElem = linkElem;
@@ -1135,14 +1135,13 @@ async function processTweetContent(tweet, tweetData)
 
     }
 
-    Promise.all(elemsQuery).then((values) =>
+    Promise.allSettled(elemsQuery).then((values) =>
     {
         for(let i = 0; i < values.length; i++)
         {
-            mediaInfos[i].mediaElem = values[i];
+            mediaInfos[i].mediaElem = values[i].value;
         }
         updateContentElements(tweet, tweetData, mediaInfos);
-
     });
 }
 
@@ -1572,18 +1571,20 @@ async function loadToggleValues()
 {
     if(prefsLoaded === true) { return; }
 
-    toggleNSFW = await getToggleObj("thd_blurNSFW", false);
-    toggleHQImg = await getToggleObj("thd_toggleHQImg", true);
-    toggleHQVideo = await getToggleObj("thd_toggleHQVideo", true);
-    toggleLiked = await getToggleObj("thd_toggleLiked", true);
-    toggleFollowed = await getToggleObj("thd_toggleFollowed", false);
-    toggleRetweet = await getToggleObj("thd_toggleRetweet", false);
-    toggleTopics = await getToggleObj("thd_toggleTopics", false);
-    toggleClearTopics = await getToggleObj("thd_toggleClearTopics", false);
-    toggleTimelineScaling = await getToggleObj("thd_toggleTimelineScaling", true);
-    toggleAnalyticsDisplay = await getToggleObj("thd_toggleAnalyticsDisplay", false);
-    toggleDisableForYou = await getToggleObj("thd_toggleDisableForYou", false);
-    toggleMakeLinksVX = await getToggleObj("thd_makeLinksVX", true);
+    await Promise.allSettled([
+        (async() => { toggleNSFW = await getToggleObj("thd_blurNSFW", false) })(),
+        (async() => { toggleHQImg = await getToggleObj("thd_toggleHQImg", true) })(),
+        (async() => { toggleHQVideo = await getToggleObj("thd_toggleHQVideo", true) })(),
+        (async() => { toggleLiked = await getToggleObj("thd_toggleLiked", true) })(),
+        (async() => { toggleFollowed = await getToggleObj("thd_toggleFollowed", false) })(),
+        (async() => { toggleRetweet = await getToggleObj("thd_toggleRetweet", false) })(),
+        (async() => { toggleTopics = await getToggleObj("thd_toggleTopics", false) })(),
+        (async() => { toggleClearTopics = await getToggleObj("thd_toggleClearTopics", false) })(),
+        (async() => { toggleTimelineScaling = await getToggleObj("thd_toggleTimelineScaling", true) })(),
+        (async() => { toggleAnalyticsDisplay = await getToggleObj("thd_toggleAnalyticsDisplay", false) })(),
+        (async() => { toggleDisableForYou = await getToggleObj("thd_toggleDisableForYou", false) })(),
+        (async() => { toggleMakeLinksVX = await getToggleObj("thd_makeLinksVX", true) })()
+    ]);
 
     prefsLoaded = true;
 
