@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.63
+// @version      2.65
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -210,7 +210,7 @@ unsafeWindow.XMLHttpRequest.prototype.open = exportFunction(function(method, url
     processXMLOpen(this, method, url);
     openOpen.call(this, method, url);
 }, unsafeWindow);
-
+/*
 (function (open)
 {
     XMLHttpRequest.prototype.open = function (method, url)
@@ -218,7 +218,7 @@ unsafeWindow.XMLHttpRequest.prototype.open = exportFunction(function(method, url
          processXMLOpen(this, method, url);
          open.apply(this, arguments);
     };
-})(XMLHttpRequest.prototype.open);
+})(XMLHttpRequest.prototype.open);*/
 
 
 function processXMLOpen(thisRef, method, url)
@@ -233,11 +233,15 @@ function processXMLOpen(thisRef, method, url)
         {
             if (toggleHQVideo.enabled && thisRef.readyState === 4)
             {
-                const m3u = filterVideoSources(e.target.responseText);
+                const m3uText = e.target.responseText;
+                if(!m3uText.includes('#EXT-X-MEDIA-SEQUENCE'))
+                {
+                    const m3u = filterVideoSources(m3uText);
 
-                Object.defineProperty(thisRef, 'response', { writable: true });
-                Object.defineProperty(thisRef, 'responseText', { writable: true });
-                thisRef.response = thisRef.responseText = m3u;
+                    Object.defineProperty(thisRef, 'response', { writable: true });
+                    Object.defineProperty(thisRef, 'responseText', { writable: true });
+                    thisRef.response = thisRef.responseText = m3u;
+                }
             }
         });
     }
@@ -250,9 +254,9 @@ function processXMLOpen(thisRef, method, url)
                 let json = JSON.parse(e.target.response);
                 let vidInfo = json.extended_entities?.media?.video_info ?? null;
 
-                if(vidInfo != null && vidInfo.variants != null && vidInfo.variants.length > 1)
+                if(vidInfo != null && vidInfo.variants != null && vidInfo.variants.length > 2)
                 {
-                    vidInfo.variants = [stripVariants(vidInfo.variants)];
+                    vidInfo.variants = stripVariants(vidInfo.variants, true);
 
                     Object.defineProperty(thisRef, 'responseText', { writable: true });
                     thisRef.responseText = JSON.stringify(json);
@@ -322,12 +326,18 @@ function processXMLOpen(thisRef, method, url)
         }*/
 }
 
-function stripVariants(variants)
+function stripVariants(variants, keepM3U = false)
 {
     if(variants == null) { return null; }
-    variants = variants.filter(variant => variant?.bitrate != null);
-    variants = variants.sort((a, b) => (b.bitrate - a.bitrate));
-    return variants[0];
+    let bestQuality = variants.reduce((a, b) => ((a?.bitrate ?? 0) > (b?.bitrate ?? 0) ? a : b));
+    if(keepM3U)
+    {
+        let m3u = variants.find((entry) => entry.url.includes('.m3u8'));
+        if(m3u === undefined) { return [bestQuality]; }
+        return [bestQuality, m3u];
+    }
+
+    return bestQuality;
 }
 
 function processMediaResponseData(mediasJson)
@@ -337,8 +347,9 @@ function processMediaResponseData(mediasJson)
 
     mediasJson.forEach((mediaItem) =>
     {
-        if(hqVideo === true && mediaItem.type === 'video'){
-            mediaItem.video_info.variants = [stripVariants(mediaItem.video_info.variants)];
+        if(hqVideo === true && mediaItem.type === 'video')
+        {
+            mediaItem.video_info.variants = stripVariants(mediaItem.video_info.variants, true);
         }
         else if(hqImg === true && mediaItem.type == 'photo')
         {
@@ -411,8 +422,7 @@ class Tweet
                                     let mediaData = valueJson.media_entities[mediaId];
                                     if(hqVideo === true && mediaData.video_info != null)
                                     {
-                                        let bestVariant = stripVariants(mediaData.video_info.variants);
-                                        mediaData.video_info.variants = [bestVariant];
+                                        mediaData.video_info.variants = stripVariants(mediaData.video_info.variants, true);
                                     }
                                     this.media.push(mediaData);
                                 }
@@ -479,7 +489,8 @@ class Tweet
             isVideo: isVideo,
             isPhoto: isPhoto,
             getContentURL: () => {
-                if(isVideo) { return stripVariants(mediaItem.video_info.variants).url; }
+                if(isVideo) {
+                    return stripVariants(mediaItem.video_info.variants).url; }
                 return getHighQualityImage(media_url);
             },
             type: mediaItem.type,
