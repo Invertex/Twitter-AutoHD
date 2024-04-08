@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.65
+// @version      2.67
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -10,6 +10,9 @@
 // @match        https://*.twitter.com/*
 // @match        https://*.twimg.com/media/*
 // @match        https://*.x.com/*
+// @match        https://*.fixupx.com/*
+// @match        https://*.vxtwitter.com/*
+// @match        https://*.fxtwitter.com/*
 // @noframes
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
@@ -39,20 +42,33 @@ const argsAttrOnly = { attributes: true, childList: false, subtree: false };
 const dlSVG = '<g><path d="M 8 51 C 5 54 5 48 5 42 L 5 -40 C 5 -45 -5 -45 -5 -40 V 42 C -5 48 -5 54 -8 51 L -48 15 C -51 12 -61 17 -56 22 L -12 61 C 0 71 0 71 12 61 L 56 22 C 61 17 52 11 48 15 Z"></path>' +
     '<path d="M 56 -58 C 62 -58 62 -68 56 -68 H -56 C -62 -68 -62 -58 -56 -58 Z"></path></g>';
 
-const twitSVG = '<g><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"></path></g>';
+const twitSVG = '<g><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 '+
+      '0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 '+
+      '4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 '+
+      '2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"></path></g>';
 
 const bookmarkSVG = '<g><path d="M17 3V0h2v3h3v2h-3v3h-2V5h-3V3h3zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V11h2v11.94l-8-5.71-8 5.71V4.5C4 3.12 5.119 2 6.5 2h4.502v2H6.5z"></path></g>';
-const unbookmarkSVG = '<g><path d="M16.586 4l-2.043-2.04L15.957.54 18 2.59 20.043.54l1.414 1.42L19.414 4l2.043 2.04-1.414 1.42L18 5.41l-2.043 2.05-1.414-1.42L16.586 4zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V11h2v11.94l-8-5.71-8 5.71V4.5C4 3.12 5.119 2 6.5 2h4.502v2H6.5z"></path></g>';
+const unbookmarkSVG = '<g><path d="M16.586 4l-2.043-2.04L15.957.54 18 2.59 20.043.54l1.414 1.42L19.414 4l2.043 2.04-1.414 1.42L18 5.41l-2.043 2.05-1.414-1.42L16.586 '
++'4zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V11h2v11.94l-8-5.71-8 5.71V4.5C4 3.12 5.119 2 6.5 2h4.502v2H6.5z"></path></g>';
 
-addGlobalStyle('@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }');
-addGlobalStyle('.loader { border: 16px solid #f3f3f373; display: flex; margin: auto; border-top: 16px solid #3498db99; border-radius: 50%; width: 120px; height: 120px; animation: spin 2s linear infinite;}');
+addGlobalStyle('@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }'
++'.loader { border: 16px solid #f3f3f373; display: flex; margin: auto; border-top: 16px solid #3498db99; border-radius: 50%; width: 120px; height: 120px; animation: spin 2s linear infinite;}'
++'.context-menu { position: absolute; text-align: center; margin: 0px; background: #040404; border: 1px solid #0e0e0e; border-radius: 5px;}'
++'.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; list-style: none;}'
++'.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; user-select: none;}'
++'.context-menu ul li:hover { background: #202020;}'
++'a[aria-label="Grok"], div > aside[aria-label*="Premium"], div[data-testid="inlinePrompt"]:has(div > a[href^="/i/premium_sign_up"]), '
+               +'div:has(> div > div[data-testid="bookmark"], > div > div[data-testid="removeBookmark"]) > div#thd_button_Bookmark { display: none !important; }'
 
-addGlobalStyle('.context-menu { position: absolute; text-align: center; margin: 0px; background: #040404; border: 1px solid #0e0e0e; border-radius: 5px;}');
-addGlobalStyle('.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; list-style: none;}');
-addGlobalStyle('.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; user-select: none;}');
-addGlobalStyle('.context-menu ul li:hover { background: #202020;}');
-addGlobalStyle('a[aria-label="Grok"], div > aside[aria-label*="Premium"], div[data-testid="inlinePrompt"]:has(div > a[href^="/i/premium_sign_up"]), div:has(> div > div[data-testid="bookmark"], > div > div[data-testid="removeBookmark"]) > div#thd_button_Bookmark { display: none !important; }');
-
++'.thd_settings_collapsible { background-color:rgb(28, 30, 34); color:rgb(180, 183, 173); cursor:pointer; width:100%; border:none; text-align:left; outline:none; font-size:15px; border-radius:11px 11px 0 0; padding: 8px 14px 8px}'
++'.thd_settings_collapsible:after { content: "Show \u2795"; font-size: 13px; float: right; margin-left: 5px; }'
++'.thd_settings_active, .thd_settings_collapsible:hover { background-color:rgb(38, 40, 44); }'
++'.thd_settings_active:after { content: "Hide \u2796"; }'
++'.thd_settings_content{ overflow:hidden; background-color:rgb(22, 24, 28); flex-flow: column; display: flex; padding-bottom: 6px; }'
+              +'.thd_settings_content_closed { display: none !important; }'
++'.thd_settings_toggle { margin: 0.01em 0.4em 0.01em; border-style: solid; border-width: 0.015em; border-color: #101010; background-color: #202020; border-radius:6px; color: rgb(100, 100, 100); }'
++'.thd_settings_toggle:hover { background-color: #393838; border-width: 0.045em; border-color: #505050; cursor:pointer; color: rgb(210, 210 210); }'
++'.thd_settings_toggle_enabled { background-color: #292828; border-width: 0.045em; border-color: #404040; cursor:pointer; color: rgb(190, 190, 190); }');
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
@@ -1612,6 +1628,22 @@ async function loadToggleValues()
 
 async function setupToggles(sidePanel)
 {
+    if(sidePanel.querySelector('.thd_settings_collapsible')){ return; }
+    sidePanel = sidePanel.querySelector('div:has(> nav)');
+
+    let settingsFold = document.createElement('button');
+    settingsFold.className = 'thd_settings_collapsible';
+    settingsFold.innerText = "Twitter AutoHD Settings:";
+    let settingsContainer = document.createElement('div');
+    settingsContainer.className = 'thd_settings_content thd_settings_content_closed';
+    sidePanel.appendChild(settingsFold);
+    sidePanel.appendChild(settingsContainer);
+    sidePanel = settingsContainer;
+    settingsFold.addEventListener("click", function() {
+        this.classList.toggle("thd_settings_active");
+        var content = this.nextElementSibling;
+        content.classList.toggle('thd_settings_content_closed');
+    });
     createToggleOption(sidePanel, toggleNSFW, "NSFW Blur: ", "ON", "OFF");
     createToggleOption(sidePanel, toggleHQImg, "HQ Image Loading: ", "ON", "OFF");
     createToggleOption(sidePanel, toggleHQVideo, "HQ Video Loading: ", "ON", "OFF");
@@ -1623,10 +1655,10 @@ async function setupToggles(sidePanel)
     createToggleOption(sidePanel, toggleTopics, "Topic Tweets: ", "ON", "OFF");
     createToggleOption(sidePanel, toggleClearTopics, "Interests/Topics Prefs AutoClear: ", "ON", "OFF");
     createToggleOption(sidePanel, toggleAnalyticsDisplay, "Show Post Views: ", "ON", "OFF");
-    await createToggleOption(sidePanel, toggleDisableForYou, 'Disable "For You" page: ', "ON", "OFF");
+    createToggleOption(sidePanel, toggleDisableForYou, 'Disable "For You" page: ', "ON", "OFF");
 }
 
-async function createToggleOption(sidePanel, toggleState, toggleText, toggleOnText, toggleOffText)
+function createToggleOption(sidePanel, toggleState, toggleText, toggleOnText, toggleOffText)
 {
     toggleState.elem = sidePanel.querySelector('#' + toggleState.name);
     toggleOnText = toggleText + toggleOnText;
@@ -1634,21 +1666,18 @@ async function createToggleOption(sidePanel, toggleState, toggleText, toggleOnTe
     if (toggleState.elem == null)
     {
         toggleState.elem = createToggleButton(toggleState.enabled ? toggleOnText : toggleOffText, toggleState.name);
-        toggleState.elem.style.marginTop = "0.4em";
-        toggleState.elem.style.marginBottom = "0.1em";
-        toggleState.elem.style.marginRight = "1em";
-        toggleState.elem.style.marginLeft = "1em";
-        toggleState.elem.style.outlineStyle = "solid";
-        toggleState.elem.style.outlineWidth = "0.02em";
+        toggleState.elem.classList.toggle("thd_settings_toggle_enabled", toggleState.enabled);
+
         toggleState.elem.addEventListener('click', (e) =>
         {
             toggleState.enabled = toggleState.enabled ? false : true;
+            toggleState.elem.classList.toggle("thd_settings_toggle_enabled", toggleState.enabled);
             setUserPref(toggleState.name, toggleState.enabled);
             toggleState.onChanged.dispatchEvent(new CustomEvent(toggleState.name, {'detail':{'toggle':toggleState}}));
             toggleState.elem.innerHTML = toggleState.enabled ? toggleOnText : toggleOffText;
         }, false);
 
-        const footer = sidePanel.querySelector('nav').parentElement.appendChild(toggleState.elem);
+        sidePanel.appendChild(toggleState.elem);
     }
 }
 
@@ -1752,12 +1781,7 @@ function createToggleButton(text, id)
     const btn = document.createElement('button');
     btn.innerText = text;
     btn.id = id;
-    btn.style.borderRadius = "9999px";
-    btn.style.borderStyle = "solid";
-    btn.style.borderWidth = "1px";
-    btn.style.borderColor = "#00000000";
-    btn.style.backgroundColor = "#292828";
-    btn.style.color = "#cdccc8";
+    btn.className = 'thd_settings_toggle';
     return btn;
 }
 
