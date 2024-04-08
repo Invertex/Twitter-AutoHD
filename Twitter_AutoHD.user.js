@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.67
+// @version      2.68
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -51,24 +51,25 @@ const bookmarkSVG = '<g><path d="M17 3V0h2v3h3v2h-3v3h-2V5h-3V3h3zM6.5 4c-.276 0
 const unbookmarkSVG = '<g><path d="M16.586 4l-2.043-2.04L15.957.54 18 2.59 20.043.54l1.414 1.42L19.414 4l2.043 2.04-1.414 1.42L18 5.41l-2.043 2.05-1.414-1.42L16.586 '
 +'4zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V11h2v11.94l-8-5.71-8 5.71V4.5C4 3.12 5.119 2 6.5 2h4.502v2H6.5z"></path></g>';
 
-addGlobalStyle('@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }'
-+'.loader { border: 16px solid #f3f3f373; display: flex; margin: auto; border-top: 16px solid #3498db99; border-radius: 50%; width: 120px; height: 120px; animation: spin 2s linear infinite;}'
-+'.context-menu { position: absolute; text-align: center; margin: 0px; background: #040404; border: 1px solid #0e0e0e; border-radius: 5px;}'
-+'.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; list-style: none;}'
-+'.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; user-select: none;}'
-+'.context-menu ul li:hover { background: #202020;}'
-+'a[aria-label="Grok"], div > aside[aria-label*="Premium"], div[data-testid="inlinePrompt"]:has(div > a[href^="/i/premium_sign_up"]), '
-               +'div:has(> div > div[data-testid="bookmark"], > div > div[data-testid="removeBookmark"]) > div#thd_button_Bookmark { display: none !important; }'
+addGlobalStyle(`@-webkit-keyframes spin { 0% { -webkit-transform: rotate(0deg); transform: rotate(0deg); } 100% { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
+@keyframes spin { 0% { -webkit-transform: rotate(0deg); transform: rotate(0deg); } 100% { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
+.loader { border: 16px solid #f3f3f373; display: -webkit-box; display: -ms-flexbox; display: flex; margin: auto; border-top: 16px solid #3498db99; border-radius: 50%; width: 120px; height: 120px; -webkit-animation: spin 2s linear infinite; animation: spin 2s linear infinite;}
+.context-menu { position: absolute; text-align: center; margin: 0px; background: #040404; border: 1px solid #0e0e0e; border-radius: 5px;}
+.context-menu ul { padding: 0px; margin: 0px; min-width: 190px; list-style: none;}
+.context-menu ul li { padding-bottom: 7px; padding-top: 7px; border: 1px solid #0e0e0e; color:#c1bcbc; font-family: sans-serif; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;}
+.context-menu ul li:hover { background: #202020;}
+a[aria-label="Grok"], div > aside[aria-label*="Premium"], div[data-testid="inlinePrompt"]:has(div > a[href^="/i/premium_sign_up"]),
+               div:has(> div > div[data-testid="bookmark"], > div > div[data-testid="removeBookmark"]) > div#thd_button_Bookmark { display: none !important; }
+.thd_settings_collapsible { background-color:rgb(28, 30, 34); color:rgb(180, 183, 173); cursor:pointer; width:100%; border:none; text-align:left; outline:none; font-size:15px; border-radius:11px 11px 0 0; padding: 8px 14px 8px}
+.thd_settings_collapsible:after { content: "Show \u2795"; font-size: 13px; float: right; margin-left: 5px; }
+.thd_settings_active, .thd_settings_collapsible:hover { background-color:rgb(38, 40, 44); }
+.thd_settings_active:after { content: "Hide \u2796"; }
+.thd_settings_content{ overflow:hidden; background-color:rgb(22, 24, 28); -webkit-box-orient: vertical; -webkit-box-direction: normal; -ms-flex-flow: column; flex-flow: column; display: -webkit-box; display: -ms-flexbox; display: flex; padding-bottom: 6px; }
+              .thd_settings_content_closed { display: none !important; }
+.thd_settings_toggle { margin: 0.01em 0.4em 0.01em; border-style: solid; border-width: 0.015em; border-color: #101010; background-color: #202020; border-radius:6px; color: rgb(100, 100, 100); }
+.thd_settings_toggle:hover { background-color: #393838; border-width: 0.045em; border-color: #505050; cursor:pointer; color: rgb(210, 210 210); }
+.thd_settings_toggle_enabled { background-color: #292828; border-width: 0.045em; border-color: #404040; cursor:pointer; color: rgb(190, 190, 190); }`);
 
-+'.thd_settings_collapsible { background-color:rgb(28, 30, 34); color:rgb(180, 183, 173); cursor:pointer; width:100%; border:none; text-align:left; outline:none; font-size:15px; border-radius:11px 11px 0 0; padding: 8px 14px 8px}'
-+'.thd_settings_collapsible:after { content: "Show \u2795"; font-size: 13px; float: right; margin-left: 5px; }'
-+'.thd_settings_active, .thd_settings_collapsible:hover { background-color:rgb(38, 40, 44); }'
-+'.thd_settings_active:after { content: "Hide \u2796"; }'
-+'.thd_settings_content{ overflow:hidden; background-color:rgb(22, 24, 28); flex-flow: column; display: flex; padding-bottom: 6px; }'
-              +'.thd_settings_content_closed { display: none !important; }'
-+'.thd_settings_toggle { margin: 0.01em 0.4em 0.01em; border-style: solid; border-width: 0.015em; border-color: #101010; background-color: #202020; border-radius:6px; color: rgb(100, 100, 100); }'
-+'.thd_settings_toggle:hover { background-color: #393838; border-width: 0.045em; border-color: #505050; cursor:pointer; color: rgb(210, 210 210); }'
-+'.thd_settings_toggle_enabled { background-color: #292828; border-width: 0.045em; border-color: #404040; cursor:pointer; color: rgb(190, 190, 190); }');
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
