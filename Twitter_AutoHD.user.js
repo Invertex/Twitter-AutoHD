@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.68
+// @version      2.69
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -68,7 +68,8 @@ a[aria-label="Grok"], div > aside[aria-label*="Premium"], div[data-testid="inlin
               .thd_settings_content_closed { display: none !important; }
 .thd_settings_toggle { margin: 0.01em 0.4em 0.01em; border-style: solid; border-width: 0.015em; border-color: #101010; background-color: #202020; border-radius:6px; color: rgb(100, 100, 100); }
 .thd_settings_toggle:hover { background-color: #393838; border-width: 0.045em; border-color: #505050; cursor:pointer; color: rgb(210, 210 210); }
-.thd_settings_toggle_enabled { background-color: #292828; border-width: 0.045em; border-color: #404040; cursor:pointer; color: rgb(190, 190, 190); }`);
+.thd_settings_toggle_enabled { background-color: #292828; border-width: 0.045em; border-color: #404040; cursor:pointer; color: rgb(190, 190, 190); }
+`);
 
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
@@ -1578,15 +1579,22 @@ function toggle_nsfwBlurStyle(enabled)
 {
     if(!enabled)
     {
-         //addGlobalStyle('div:has(> div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(> div > div > svg > g > path) { display: none !important; } div:has(> div > div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(div[data-testid="tweetPhoto"]) > div { filter: blur(0px) !important; }', "nsfwblur");
-        addGlobalStyle(//`${nsfwBlurUIQuery} > div { display: none !important; } ${nsfwBlurFilterQuery} { filter: blur(0px) !important; }` +
-                      // `div:has(> div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(> div > div > svg > g > path) { display: none !important; }`
-                      //  + `div:has(> div > div > div[role="button"][style*="backdrop-filter: blur(4px);"][style*="background-color:"]):has(> div > div > div > svg > g > path):has(div[data-testid="tweetPhoto"]) > div { filter: blur(0px) !important; }` +
-                        //Media thumb view overlay css target
-                        `div[aria-label^="Timeline:"] div[data-testid="cellInnerDiv"] li[role="listitem"] div:has(> div > svg > g > path) > div:has(img) { filter: blur(0px) !important; }` +
-                        //Media thumb view filter css target
-                        `div[aria-label^="Timeline:"] div[data-testid="cellInnerDiv"] li[role="listitem"] div:has(> svg > g > path) { display: none !important; }`
-                        , "nsfwblur", "nsfwblur");
+        addGlobalStyle(//Media thumb view overlay css target
+`div[aria-label^="Timeline:"] div[data-testid="cellInnerDiv"] li[role="listitem"] div:has(> div > svg > g > path) > div:has(img) {
+    -webkit-filter: blur(0px) !important;
+            filter: blur(0px) !important;
+}
+
+div[aria-label^="Timeline:"] div[data-testid="cellInnerDiv"] li[role="listitem"] div:has(> svg > g > path) {
+    display: none !important;
+}
+
+article[data-testid="tweet"] div[aria-labelledby^="id_"] div:has(> div > div > 	div[role="button"][style*="blur"])
+{
+> div:not(:has(div[data-testid^="tweet"])) { display: none !important; }
+> div > div > div[role="button"] { display: none !important; }
+> div:has(div[data-testid^="tweet"]) { -webkit-filter: none !important; filter: none !important; }
+}`, "nsfwblur");
 
     }
     if(enabled)
@@ -1620,6 +1628,11 @@ async function loadToggleValues()
     {
         addGlobalStyle('div[role="group"] > div:has(> a[href$="/analytics"]) { display: none !important; }', "analyticsStyle");
     }
+    toggleAnalyticsDisplay.onChanged.addEventListener(toggleAnalyticsDisplay.name, (e) =>
+    {
+        if(!toggleAnalyticsDisplay.enabled) { addGlobalStyle('div[role="group"] > div:has(> a[href$="/analytics"]) { display: none !important; }', "analyticsStyle"); }
+        else { removeGlobalStyle("analyticsStyle"); }
+    });
     toggleNSFW.onChanged.addEventListener(toggleNSFW.name,(e) =>
     {
         toggle_nsfwBlurStyle(toggleNSFW.enabled);
