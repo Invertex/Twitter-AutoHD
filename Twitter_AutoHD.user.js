@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.72
+// @version      2.73
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -970,7 +970,7 @@ function updateContentElements(tweetElem, tweetData, mediaInfos)
 
 function updatePadder(tweetElem, ratio)
 {
-    const padder = tweetElem.querySelector('div[id^="id_"] div[style^="padding-bottom"]');
+    const padder = tweetElem.querySelector('div[id^="id_"] [thd_customctx] div[style^="padding-bottom"]');
 
     if(padder != null && padder.getAttribute("modifiedPadding") == null)
     {
