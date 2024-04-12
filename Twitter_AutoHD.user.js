@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.73
+// @version      2.74
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -968,27 +968,29 @@ function updateContentElements(tweetElem, tweetData, mediaInfos)
     updateContentLayout(tweetElem, tweetData, mediaInfos);
 }
 
-function updatePadder(tweetElem, ratio)
+async function updatePadder(tweetElem, ratio)
 {
-    const padder = tweetElem.querySelector('div[id^="id_"] [thd_customctx] div[style^="padding-bottom"]');
+    let padder = await awaitElem(tweetElem, 'div[id^="id_"] [thd_customctx]');
+    if(padder == null) { return; }
 
-    if(padder != null && padder.getAttribute("modifiedPadding") == null)
+    padder = padder.closest('div[id^="id_"]').querySelector('div[style^="padding-bottom"]');
+
+    const modPaddingAttr = "modifiedPadding";
+
+    if(padder != null && !addHasAttribute(padder, modPaddingAttr))
     {
-        const modPaddingAttr = "modifiedPadding";
         const padderParent = padder.parentElement;
         const flexer = padder.closest('div[id^="id_"] > div');
         const bg = flexer.querySelector('div[style^="background"] > div');
 
         padder.style = `padding-bottom: ${ratio}%;`;
-        padder.setAttribute(modPaddingAttr, "");
-        padderParent.setAttribute(modPaddingAttr, "");
         flexer.style = "align-self:normal; !important"; //Counteract Twitter's new variable width display of content that is rather wasteful of screenspace
         if(bg) { bg.style.width = "100%"; }
 
         padderParent.removeAttribute('style');
 
         doOnAttributeChange(padder, (padderElem) => { if(padderElem.getAttribute("modifiedPadding") == null) { padderElem.style = "padding-bottom: " + (ratio) + "%;";} })
-        if(padderParent.getAttribute("modifiedPadding") == null)
+        if(!addHasAttribute(padderParent, modPaddingAttr))
         {
             doOnAttributeChange(padderParent, (padderParentElem) => { if(padderParentElem.getAttribute("modifiedPadding") == null) { padderParentElem.removeAttribute('style');} })
         }
