@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.69
+// @version      2.72
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -189,23 +189,6 @@ const filterVideoSources = function (m3u8)
 var transactID = "";
 var authy = "";
 
-(function (setRequestHeader)
-{
-    XMLHttpRequest.prototype.setRequestHeader = function(name, value)
-    {
-        if(name == "X-Client-Transaction-Id")
-        {
-            transactID = value;
-        }
-        else if(name == "authorization")
-        {
-            authy = value;
-        }
-
-        setRequestHeader.apply(this, arguments);
-    };
-})(XMLHttpRequest.prototype.setRequestHeader);
-
 var oldReqHead = unsafeWindow.XMLHttpRequest.prototype.setRequestHeader;
 unsafeWindow.XMLHttpRequest.prototype.setRequestHeader = exportFunction(function(name, value)
 {
@@ -228,15 +211,6 @@ unsafeWindow.XMLHttpRequest.prototype.open = exportFunction(function(method, url
     processXMLOpen(this, method, url);
     openOpen.call(this, method, url);
 }, unsafeWindow);
-/*
-(function (open)
-{
-    XMLHttpRequest.prototype.open = function (method, url)
-    {
-         processXMLOpen(this, method, url);
-         open.apply(this, arguments);
-    };
-})(XMLHttpRequest.prototype.open);*/
 
 
 function processXMLOpen(thisRef, method, url)
@@ -275,14 +249,15 @@ function processXMLOpen(thisRef, method, url)
                 if(vidInfo != null && vidInfo.variants != null && vidInfo.variants.length > 2)
                 {
                     vidInfo.variants = stripVariants(vidInfo.variants, true);
-
+                    Object.defineProperty(thisRef, 'response', { writable: true });
                     Object.defineProperty(thisRef, 'responseText', { writable: true });
-                    thisRef.responseText = JSON.stringify(json);
+
+                    thisRef.response = thisRef.responseText = JSON.stringify(json);
                 }
             }
         });
     }
-    else if(url.includes('/Home') || url.includes('includePromotedContent') || url.includes('ListLatestTweetsTimeline') || url.includes('/UserMedia'))
+    else if(url.includes('/Home') || url.includes('includePromotedContent') || url.includes('ListLatestTweetsTimeline') || url.includes('/UserMedia') || url.includes('/UserTweetsAndReplies?')|| url.includes('/Likes?'))
     {
         url = url.replace('includePromotedContent%22%3Atrue', 'includePromotedContent%22%3Afalse');
         url = url.replace('phone_label_enabled%22%3Afalse', 'phone_label_enabled%22%3Atrue');
@@ -308,10 +283,10 @@ function processXMLOpen(thisRef, method, url)
                 if(json?.data != null)
                 {
                     processTimelineData(json);
-
+                    Object.defineProperty(thisRef, 'response', { writable: true });
                     Object.defineProperty(thisRef, 'responseText', { writable: true });
 
-                    thisRef.responseText = JSON.stringify(json);
+                   thisRef.response = thisRef.responseText = JSON.stringify(json);
                 }
             }
         });
@@ -1396,8 +1371,19 @@ function observeTimeline(tl)
     }
 }
 
-async function watchForTimeline(primaryColumn, section)
+async function watchForTimeline(primaryColumn)
 {
+    let section = await awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub);
+
+    if (addHasAttribute(section, modifiedAttr)) { return; }
+
+    if(!addHasAttribute(section.parentElement, modifiedAttr)) {
+        watchForAddedNodes(section.parentElement, { attributes: false, childList: true, subtree: false }, (addedNodes, mutes) => {
+            watchForTimeline(primaryColumn);
+
+        });
+    }
+
     const checkTimeline = async function ()
     {
         let tl = await awaitElem(section, 'DIV[style*="position:"]', { childList: true, subtree: true, attributes: true });
@@ -1435,25 +1421,24 @@ var pageWidthLayoutRule;
 async function watchPrimaryColumn(main, primaryColumn)
 {
     if(primaryColumn == null) { return; }
-    if (addHasAttribute(primaryColumn, modifiedAttr)) { return; }
+    //
 
     awaitElem(primaryColumn, 'nav', argsChildAndSub).then((nav) =>
     {
         let navCont = nav.parentElement;
-        watchForChange(navCont, argsChildOnly, () => {
-                watchForTimeline(primaryColumn, navCont);
-            });
+        if (addHasAttribute(navCont, modifiedAttr)) { return; }
+        watchForChange(navCont, argsChildOnly, () => { watchForTimeline(primaryColumn, navCont); });
     });
 
-    hideForYou(primaryColumn);
-
-    //Watch to handle case where timelines are partially lost when clicking on the quoted post name.
-    watchForChange(primaryColumn.firstElementChild, argsChildOnly, () => {
-        awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) => {
-            watchForTimeline(primaryColumn, section);
+    if (!addHasAttribute(primaryColumn.firstElementChild, modifiedAttr)) {
+        //Watch to handle case where timelines are partially lost when clicking on the quoted post name.
+        watchForChange(primaryColumn.firstElementChild, argsChildOnly, () => {
+            watchForTimeline(primaryColumn);
         });
-    });
+    }
 
+    if (addHasAttribute(primaryColumn, modifiedAttr)) { return; }
+    hideForYou(primaryColumn);
 
     if(pageWidthLayoutRule == null) { pageWidthLayoutRule = getCSSRuleContainingStyle('width', (("." + main.className).replace(' ', ' .')).split(' ')); }
 
@@ -1473,19 +1458,17 @@ async function watchPrimaryColumn(main, primaryColumn)
         document.addEventListener('mouseup', (e) => { primaryColumnResizer(primaryColumn, e, false, true) });
     }
 
-    //  let section = awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub);
-    awaitElem(primaryColumn, 'section[role="region"]', argsChildAndSub).then((section) =>
-    {
-        watchForTimeline(primaryColumn, section);
-    });
-
+    watchForTimeline(primaryColumn);
 }
 
 async function onMainChange(main, mutations)
 {
 
     replaceMuskratText(document.body);
-    awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>{ watchPrimaryColumn(main, primaryColumn); replaceMuskratText(document.body); });
+    awaitElem(main, 'div[data-testid="primaryColumn"]', argsChildAndSub).then((primaryColumn) =>{
+        watchPrimaryColumn(main, primaryColumn);
+        replaceMuskratText(document.body);
+    });
 
     watchSideBar(main);
 }
@@ -1514,11 +1497,11 @@ function hideForYou(primaryColumn)
     let mainTabs = primaryColumn.querySelector('div[role="tablist"]');
     if(mainTabs)
     {
-        let tabs = mainTabs.querySelectorAll('div[role="presentation"]');
+        let tabs = mainTabs.querySelectorAll('div[role="presentation"] > a[href="/home"]');
         if(tabs.length > 1)
         {
-            tabs[0].style.display = 'none';
-            tabs[1].click();
+            tabs[0].parentElement.style.display = 'none';
+            tabs[1].parentElement.click();
         }
     }
 }
