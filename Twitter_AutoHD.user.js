@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.74
+// @version      2.77
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -257,7 +257,7 @@ function processXMLOpen(thisRef, method, url)
             }
         });
     }
-    else if(url.includes('/Home') || url.includes('includePromotedContent') || url.includes('ListLatestTweetsTimeline') || url.includes('/UserMedia') || url.includes('/UserTweetsAndReplies?')|| url.includes('/Likes?'))
+    else if(url.includes("/graphql/") /*&& (url.includes('/Home') || url.includes('includePromotedContent') || url.includes('ListLatestTweetsTimeline') || url.includes('/UserMedia') || url.includes('/UserTweetsAndReplies?')|| url.includes('/Likes?'))*/)
     {
         url = url.replace('includePromotedContent%22%3Atrue', 'includePromotedContent%22%3Afalse');
         url = url.replace('phone_label_enabled%22%3Afalse', 'phone_label_enabled%22%3Atrue');
@@ -367,6 +367,8 @@ class Tweet
         }
 
         this.id = data?.rest_id ?? data?.conversation_id;
+        tweets.set(this.id, this);
+
         let legacy = data?.legacy ?? data; //Swapping to handle odd Explore page data
 
         this.media = legacy?.extended_entities?.media;
@@ -432,11 +434,23 @@ class Tweet
                             cardValue.string_value = JSON.stringify(valueJson);
                         }
                     }
+                    else if(bv.key === "photo_image_full_size_original")
+                    {
+                        let card_img = bv.value?.image_value;
+
+                        if(card_img)
+                        {
+
+                            let card_img_id = card_img.url.split('?')[0].split('/').at(-1);
+                            this.media = [{type: "photo", media_url_https: card_img.url, id_str: card_img_id, expanded_url: this.url, original_info: {width: card_img.width, height: card_img.height}}];
+                            this.hasMedia = true;
+                            break;
+                        }
+                    }
                 }
             }
         }
 
-        tweets.set(this.id, this);
 
         if(data?.edit_control?.edit_tweet_ids != null)
         {
@@ -461,14 +475,16 @@ class Tweet
         let media_id = mediaItem.id_str;
         let media_url = mediaItem.media_url_https;
         let url = mediaItem.expanded_url;
-        let comIndex = url.indexOf('.com/');
-        let urlParts = url.substring(comIndex < 0 ? 0 : comIndex + 5).split('/');
-        if(urlParts.length > 3)
+        if(!url.includes('card_img/'))
         {
-            username = urlParts[0];
-            id = urlParts[2];
+            let comIndex = url.indexOf('.com/');
+            let urlParts = url.substring(comIndex < 0 ? 0 : comIndex + 5).split('/');
+            if(urlParts.length > 3)
+            {
+                username = urlParts[0];
+                id = urlParts[2];
+            }
         }
-
         let isVideo = mediaItem.type == 'video' || media_url.includes('/tweet_video_thumb/');
         let isPhoto = mediaItem.type == 'photo';
         let counter = this.media.length < 2 ? -1 : index + 1;
@@ -569,9 +585,12 @@ function processTimelineData(json)
 {
     let instructions = json?.data?.home?.home_timeline_urt?.instructions;
     if(instructions == null) { instructions = json.data?.user?.result?.timeline_v2?.timeline?.instructions; }
+    if(instructions == null) { instructions = json.data?.user?.result?.timeline?.timeline?.instructions; }
     if(instructions == null) { instructions = json.data?.threaded_conversation_with_injections_v2?.instructions; }
     if(instructions == null) { instructions = json.data?.bookmark_timeline_v2?.timeline?.instructions; }
     if(instructions == null) { instructions = json.data?.list?.tweets_timeline?.timeline?.instructions; }
+    if(instructions == null) { instructions = json.data?.search_by_raw_query?.search_timeline?.timeline?.instructions; }
+    if(instructions == null) { instructions = json.data?.communityResults?.result?.ranked_community_timeline?.timeline?.instructions; }
     if(instructions == null) { return; }
 
     for(let inst = 0; inst < instructions.length; inst++)
@@ -752,6 +771,7 @@ function getPostButtonCopy(tweet, name, svg, svgViewBox, color, bgColor, onHover
 
 function addBookmarkButton(tweetElem, tweetData)
 {
+    return;
 	if(tweetElem == null) { return; }
 
     let id = tweetData.id;
@@ -759,6 +779,7 @@ function addBookmarkButton(tweetElem, tweetData)
 
     if(existingBookmark != null)
     {
+        return;
         existingBookmark = existingBookmark.parentElement;
         existingBookmark.style += " -webkit-flex: 0.6 1.0; flex: 0.6 1.0;";;
         let otherBtn = existingBookmark.closest('[role="group"]').childNodes.item(2);
@@ -1151,11 +1172,12 @@ async function processTweetContent(tweet, tweetData)
     });
 }
 
-async function processTweet(tweet, tweetObserver)
+function processTweet(tweet, tweetObserver)
 {
+    tweetObserver.disconnect();
     if (tweet == null /*|| (!isOStatusPage() && tweet.querySelector('div[data-testid="placementTracking"]') == null)*/ ) { return false; } //If video, should have placementTracking after first mutation
     if (tweet.getAttribute(modifiedAttr) != null || tweet.querySelector(`[${modifiedAttr}]`) ) { return true; }
-    tweetObserver.disconnect();
+
     addHasAttribute(tweet, modifiedAttr);
 
     if(toggleMakeLinksVX.enabled)
@@ -1167,12 +1189,10 @@ async function processTweet(tweet, tweetObserver)
     if(isAdvert(tweet)) { return; }
 
     let tweetData = getTweetData(tweet);
-    if(tweetData == null) { return; }
+    if(tweetData == null) {  return; }
 
-    addBookmarkButton(tweet, tweetData);
 
     if(tweetData.hasMedia) { processTweetContent(tweet, tweetData); }
-
     if(tweetData.isQuote && tweetData.quote.hasMedia) {
         tweetData.quote.tweetElem = tweet;
         processTweetContent(tweet, tweetData.quote);
@@ -1185,7 +1205,7 @@ async function listenForMediaType(tweet)
 
   //  if(!setupFilters(tweet)) { return; }
     const tweetObserver = new MutationObserver((muteList, observer) => {
-        tweetObserver.disconnect();
+
         processTweet(tweet, observer);
         tweetObserver.observe(tweet, { attributes: true, childList: true, subtree: true });
     });
@@ -1380,7 +1400,7 @@ async function watchForTimeline(primaryColumn)
     if (addHasAttribute(section, modifiedAttr)) { return; }
 
     if(!addHasAttribute(section.parentElement, modifiedAttr)) {
-        watchForAddedNodes(section.parentElement, { attributes: false, childList: true, subtree: false }, (addedNodes, mutes) => {
+        watchForAddedNodes(section.parentElement, false,{ attributes: false, childList: true, subtree: false }, (addedNodes, mutes) => {
             watchForTimeline(primaryColumn);
 
         });
