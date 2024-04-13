@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.77
+// @version      2.78
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -1594,12 +1594,17 @@ div[aria-label^="Timeline:"] div[data-testid="cellInnerDiv"] li[role="listitem"]
     display: none !important;
 }
 
-article[data-testid="tweet"] div[aria-labelledby^="id_"] div:has(> div > div > 	div[role="button"][style*="blur"])
+article[data-testid="tweet"] div[aria-labelledby^="id_"] :not([tabindex]) > div:has(> div > div > div[role="button"][style*="blur"])
 {
-> div:not(:has(div[data-testid^="tweet"])) { display: none !important; }
+> div:not(:has(div[data-testid^="tweet"]), :has([style^="transition-d"] > [aria-label])) { display: none !important; }
 > div > div > div[role="button"] { display: none !important; }
 > div:has(div[data-testid^="tweet"]) { -webkit-filter: none !important; filter: none !important; }
-}`, "nsfwblur");
+}
+article[data-testid="tweet"] div[aria-labelledby^="id_"] [data-testid="videoComponent"] > div[tabindex]:has([style^="transition-d"] > [aria-label])
+{
+    display: none !important;
+}
+`, "nsfwblur");
 
     }
     if(enabled)
