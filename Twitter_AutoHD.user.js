@@ -275,8 +275,6 @@ function processXMLOpen(thisRef, method, url)
                 try {
                     json = JSON.parse(e.target.response);
                 } catch(e) {
-                    console.log("Empty response, Twitter code is bad, let's refresh.");
-                    window.location.href = window.location.href;
                     return;
                 }
 
