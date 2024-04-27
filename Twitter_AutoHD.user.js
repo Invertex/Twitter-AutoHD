@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.80
+// @version      2.81
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -52,6 +52,39 @@ const unbookmarkSVG = '<g><path d="M16.586 4l-2.043-2.04L15.957.54 18 2.59 20.04
 +'4zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V11h2v11.94l-8-5.71-8 5.71V4.5C4 3.12 5.119 2 6.5 2h4.502v2H6.5z"></path></g>';
 
 addGlobalStyle(`@-webkit-keyframes spin { 0% { -webkit-transform: rotate(0deg); transform: rotate(0deg); } 100% { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
+div#thd_button_Download[downloading] {
+  pointer-events: none !important;
+}
+div#thd_button_Download[downloading] svg {
+  pointer-events: none !important;
+  background-color: rgba(143, 44, 242, 0.5);
+  border-radius: 12px;
+  animation-iteration-count: infinite;
+  animation-duration: 2s;
+  animation-name: dl-animation;
+}
+div#thd_button_Download[downloading] svg > path {
+    fill: rgba(255,255,255,0.2);
+}
+@keyframes dl-animation
+{
+    0%
+    {
+        background-color: cyan;
+    }
+    33%
+    {
+        background-color: magenta;
+    }
+    66%
+    {
+        background-color: yellow;
+    }
+    100%
+    {
+        background-color: cyan;
+    }
+}
 @keyframes spin { 0% { -webkit-transform: rotate(0deg); transform: rotate(0deg); } 100% { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
 .loader { border: 16px solid #f3f3f373; display: -webkit-box; display: -ms-flexbox; display: flex; margin: auto; border-top: 16px solid #3498db99; border-radius: 50%; width: 120px; height: 120px; -webkit-animation: spin 2s linear infinite; animation: spin 2s linear infinite;}
 .context-menu { position: absolute; text-align: center; margin: 0px; background: #040404; border: 1px solid #0e0e0e; border-radius: 5px;}
@@ -870,11 +903,13 @@ async function addDownloadButton(tweetElem, tweetData, mediaInfo)
     }
 
 
-    $(linkElem).click(function (e) {
+    $(linkElem).click(async function (e) {
+        linkElem.setAttribute('downloading','');
         e.preventDefault();
         e.stopPropagation();
         let dlurl = mediaInfo.data.getContentURL();
-        download(dlurl, filename);
+        await download(dlurl, filename);
+        linkElem.removeAttribute('downloading');
     });
 
     btnCopy.btn.className = btnCopy.origBtn.className;
@@ -2128,12 +2163,18 @@ function isDirectImagePage(url) //Checks if webpage we're on is a direct image v
 
 function download(url, filename)
 {
-    GM_download(
+     return new Promise((resolve, reject) =>
     {
-        name: filename + getMediaFormat(url),
-        url: url,
-        onload: function () { /*LogMessage(`Downloaded ${url}!`);*/ }
+         GM_download(
+             {
+                 name: filename + getMediaFormat(url),
+                 url: url,
+                 onload: resolve,
+                 onerror: resolve,
+                 ontimeout: resolve
+             });
     });
+
 }
 
 function getUrlFromTweet(tweet)
