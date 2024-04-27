@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.81
+// @version      2.82
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -66,22 +66,35 @@ div#thd_button_Download[downloading] svg {
 div#thd_button_Download[downloading] svg > path {
     fill: rgba(255,255,255,0.2);
 }
+div[thd_customctx]:has(video[downloading]) {
+  border-style: solid;
+  border-color: cyan;
+  border-width: 3px;
+  border-radius: 0px 12px 12px 0px;
+  animation-iteration-count: infinite;
+  animation-duration: 2s;
+  animation-name: dl-animation;
+}
 @keyframes dl-animation
 {
     0%
     {
+        border-color: cyan;
         background-color: cyan;
     }
     33%
     {
+        border-color: magenta;
         background-color: magenta;
     }
     66%
     {
+        border-color: yellow;
         background-color: yellow;
     }
     100%
     {
+        border-color: cyan;
         background-color: cyan;
     }
 }
@@ -290,7 +303,7 @@ function processXMLOpen(thisRef, method, url)
             }
         });
     }
-    else if(url.includes("/graphql/") /*&& (url.includes('/Home') || url.includes('includePromotedContent') || url.includes('ListLatestTweetsTimeline') || url.includes('/UserMedia') || url.includes('/UserTweetsAndReplies?')|| url.includes('/Likes?'))*/)
+    else if(url.includes("/graphql/"))
     {
         url = url.replace('includePromotedContent%22%3Atrue', 'includePromotedContent%22%3Afalse');
         url = url.replace('phone_label_enabled%22%3Afalse', 'phone_label_enabled%22%3Atrue');
@@ -299,15 +312,19 @@ function processXMLOpen(thisRef, method, url)
         url = url.replace('article_tweet_consumption_enabled%22%3Atrue', 'article_tweet_consumption_enabled%22%3Afalse');
         url = url.replace('count%22%3A20', 'count%22%3A30');
 
-        thisRef.addEventListener('readystatechange', function (e)
+        thisRef.addEventListener('readystatechange', function (req)
         {
             if (thisRef.readyState === 4)
             {
                 let json = null;
 
                 try {
-                    json = JSON.parse(e.target.response);
+                    json = JSON.parse(req.target.response);
                 } catch(e) {
+                    if(req.target.status >= 400 && (url.includes('TweetDetail?')))
+                    {
+                        window.location.href = window.location.href;
+                    }
                     return;
                 }
 
@@ -2033,10 +2050,10 @@ async function updateContextMenuLink(tweetData, mediaInfo)
     ctxMenuCopyVidAddress.style.display = vidVisibility;
 
     const copyAddress = function(url){ setContextMenuVisible(false); navigator.clipboard.writeText(url); };
-    const saveMedia = function(url)
+    const saveMedia = async function(url)
     {
         setContextMenuVisible(false);
-        download(url, filenameFromMediaData(mediaInfo.data));
+        await download(url, filenameFromMediaData(mediaInfo.data));
     };
     const openInNewTab = function(url)
     {
@@ -2083,7 +2100,16 @@ async function updateContextMenuLink(tweetData, mediaInfo)
     else //Video
     {
         ctxMenuOpenVidInNewTab.onclick = () => { openInNewTab(mediaInfo.data.getContentURL()) };
-        ctxMenuSaveAsVid.onclick = () => { saveMedia(mediaInfo.data.getContentURL()) };
+        if(!mediaInfo.mediaElem.hasAttribute("downloading"))
+        {
+            ctxMenuSaveAsVid.onclick = async() =>
+            {
+                mediaInfo.mediaElem.setAttribute("downloading","");
+                await saveMedia(mediaInfo.data.getContentURL());
+                mediaInfo.mediaElem.removeAttribute("downloading");
+            };
+        } else { ctxMenuSaveAsVid.style.display = "none"; }
+
         ctxMenuCopyVidAddress.onclick = () => { copyAddress(mediaInfo.data.getContentURL()) };
     }
 
@@ -2752,12 +2778,10 @@ document.addEventListener('copy', function(e)
     'use strict';
 
     if (isDirectImagePage(window.location.href)) { return; }
-
     let prefsLoading = loadToggleValues();
-    NodeList.prototype.forEach = Array.prototype.forEach;
 
     await awaitElem(document, 'BODY', argsChildAndSub);
-
+    NodeList.prototype.forEach = Array.prototype.forEach;
     preCursor = document.body.style.cursor;
     initializeCtxMenu();
 
