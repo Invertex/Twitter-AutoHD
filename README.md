@@ -23,7 +23,7 @@ To install Twitter AutoHD you need a User Script manager installed in your brows
 [Tamper Monkey](https://www.tampermonkey.net/) (PREFERRED) or [Violent Monkey](https://github.com/violentmonkey/violentmonkey).<br/>
 Install these to the browser of your choice.
 
-Then click [this link](https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js), or open the Twitter_AutoHD.user.js file in github and click "Raw". Your User Script manager should take you to an install page.
+Then click [this link](https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js), and your User Script manager should take you to an install page.
 
 # Visual changes
 No stupid X logo! Original Twitter bird instead :)</br>
