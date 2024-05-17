@@ -12,7 +12,6 @@
 - Toggle to disable "For You" page.
 - Globally toggle the NSFW blur
 - Remove Advertisement posts..
-- Bookmark button at the bottom of every post! (instead of hidden in the Share menu)
 - Custom context menu when right-clicking an image. This ensures a descriptive filename when saving, like this:</br>
 `username - postStatusNum_imgNum.jpg`
   >This ensures that your saved images always have the name of who posted the content, including the status number which you can use to get the exact tweet it was from.<br/>
