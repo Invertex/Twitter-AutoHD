@@ -2,7 +2,8 @@
 - Reverts "X" branding to Twitter style!  (Logo, Splash, Title)
 - Enforces Twitter.com domain.
 - Automatically makes Twitter load the highest resolution of video or image (optional). <br/> 
-  >***(even if the image isn't expanded to full view, it will be highest quality, including when saving it)***<br/>
+  >***(even if the image isn't expanded to full view, it will be highest quality)***<br/>
+  >***(when off, content will still be saved at its highest quality though)***<br/>
 - Video Download button on the tweet's control bar or right-click.<br/>
 - Images will layout in full view automatically if possible, or show as much as possible for multi-image layouts.<br/>
 - Allows click and drag of the right edge of the content feed to shrink/expand it to your liking. (setting will auto-save for you)
