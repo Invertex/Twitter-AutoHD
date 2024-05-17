@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.82
+// @version      2.83
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -230,6 +230,11 @@ const filterVideoSources = function (m3u8)
     return sb.toString();
 };
 
+const changeToTwitter = function(url)
+{
+     return url.replace('x.com/', 'twitter.com/');
+}
+
 
 // Intercept relevant keys used by API so we can use the API too
 var transactID = "";
@@ -254,6 +259,7 @@ unsafeWindow.XMLHttpRequest.prototype.setRequestHeader = exportFunction(function
 var openOpen = unsafeWindow.XMLHttpRequest.prototype.open;
 unsafeWindow.XMLHttpRequest.prototype.open = exportFunction(function(method, url)
 {
+    url = changeToTwitter(url);
     processXMLOpen(this, method, url);
     openOpen.call(this, method, url);
 }, unsafeWindow);
@@ -2778,6 +2784,8 @@ document.addEventListener('copy', function(e)
     'use strict';
 
     if (isDirectImagePage(window.location.href)) { return; }
+    if(window.location.href.includes('x.com/')) { window.location.href = changeToTwitter(window.location.href); return; }
+
     let prefsLoading = loadToggleValues();
 
     await awaitElem(document, 'BODY', argsChildAndSub);
