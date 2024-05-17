@@ -1,7 +1,9 @@
 # Twitter AutoHD
 - Reverts "X" branding to Twitter style!  (Logo, Splash, Title)
+- Enforces Twitter.com domain.
 - Automatically makes Twitter load the highest resolution of video or image (optional). <br/> 
-  >***(even if the image isn't expanded to full view, it will be highest quality, including when saving it)***<br/>
+  >***(even if the image isn't expanded to full view, it will be highest quality)***<br/>
+  >***(when off, content will still be saved at its highest quality though)***<br/>
 - Video Download button on the tweet's control bar or right-click.<br/>
 - Images will layout in full view automatically if possible, or show as much as possible for multi-image layouts.<br/>
 - Allows click and drag of the right edge of the content feed to shrink/expand it to your liking. (setting will auto-save for you)
@@ -10,7 +12,6 @@
 - Toggle to disable "For You" page.
 - Globally toggle the NSFW blur
 - Remove Advertisement posts..
-- Bookmark button at the bottom of every post! (instead of hidden in the Share menu)
 - Custom context menu when right-clicking an image. This ensures a descriptive filename when saving, like this:</br>
 `username - postStatusNum_imgNum.jpg`
   >This ensures that your saved images always have the name of who posted the content, including the status number which you can use to get the exact tweet it was from.<br/>
@@ -18,9 +19,11 @@
   ><b>This should also greatly help with keeping your image folders organized :)</b>
 
 # Installation
-To install Twitter AutoHD you need a User Script manager installed in your browser. There are plenty of options such as [Tamper Monkey](https://www.tampermonkey.net/) or [Violent Monkey](https://github.com/violentmonkey/violentmonkey). Install these to the browser of your choice.
+To install Twitter AutoHD you need a User Script manager installed in your browser. There are plenty of options such as:<br/>
+[Tamper Monkey](https://www.tampermonkey.net/) (PREFERRED) or [Violent Monkey](https://github.com/violentmonkey/violentmonkey).<br/>
+Install these to the browser of your choice.
 
-Then click [this link](https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js), or open the Twitter_AutoHD.user.js file in github and click "Raw". Your User Script manager should take you to an install page.
+Then click [this link](https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js), and your User Script manager should take you to an install page.
 
 # Visual changes
 No stupid X logo! Original Twitter bird instead :)</br>
