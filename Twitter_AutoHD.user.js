@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.83
+// @version      2.84
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -11,7 +11,7 @@
 // @match        https://*.twimg.com/media/*
 // @match        https://*.x.com/*
 // @match        https://*.fixupx.com/*
-// @match        https://*.vxtwitter.com/*
+// @match        https://*.fixupx.com/*
 // @match        https://*.fxtwitter.com/*
 // @noframes
 // @grant        GM_xmlhttpRequest
@@ -2752,13 +2752,13 @@ async function swapTwitterSplashLogo(reactRoot)
 function replaceWithVX(txt)
 {
     if(!toggleMakeLinksVX.enabled) { return txt; }
-    if(txt.includes('/status/') && !txt.includes('//vxtwitter.com/'))
+    if(txt.includes('/status/') && !txt.includes('//fixupx.com/'))
     {
         if(!txt.includes('.com'))
         {
-            return 'https://vxtwitter.com' + txt;
+            return 'https://fixupx.com' + txt;
         }
-        return txt.split('?')[0].replace('//twitter.com/','//vxtwitter.com/').replace('//x.com/', '//vxtwitter.com/');
+        return txt.split('?')[0].replace('//twitter.com/','//fixupx.com/').replace('//x.com/', '//fixupx.com/');
     }
     return txt;
 }
