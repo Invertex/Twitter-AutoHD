@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.84
+// @version      2.85
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -1000,7 +1000,7 @@ function updateContentElement(tweetElem, tweetData, mediaInfo, elemIndex, elemCn
         //Consistent video controls for GIF videos too
         if(mediaInfo.data.media_url.includes('/tweet_video_thumb'))
         {
-            mediaElem.removeAttribute('controls');
+            mediaElem.setAttribute('controls',"true");
             mediaElem.onplaying = (e) => { if(!mediaElem.paused && !mediaElem.getAttribute("isHovering")) { mediaElem.removeAttribute('controls'); } };
             mediaElem.onmouseover = (e) => { mediaElem.controls = true; mediaElem.setAttribute("isHovering", true); };
             mediaElem.onmouseout = (e) => { if(!mediaElem.paused ) { mediaElem.removeAttribute('controls'); mediaElem.removeAttribute("isHovering"); } };
@@ -1656,10 +1656,6 @@ article[data-testid="tweet"] div[aria-labelledby^="id_"] :not([tabindex]) > div:
 > div > div > div[role="button"] { display: none !important; }
 > div:has(div[data-testid^="tweet"]) { -webkit-filter: none !important; filter: none !important; }
 }
-article[data-testid="tweet"] div[aria-labelledby^="id_"] [data-testid="videoComponent"] > div[tabindex]:has([style^="transition-d"] > [aria-label])
-{
-    display: none !important;
-}
 `, "nsfwblur");
 
     }
@@ -1668,6 +1664,11 @@ article[data-testid="tweet"] div[aria-labelledby^="id_"] [data-testid="videoComp
         removeGlobalStyle("nsfwblur");
     }
 }
+/*
+article[data-testid="tweet"] div[aria-labelledby^="id_"] [data-testid="videoComponent"] > div[tabindex]:has([style^="transition-d"] > [aria-label])
+{
+    display: none !important;
+}*/
 
 async function loadToggleValues()
 {
