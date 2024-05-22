@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.89
+// @version      2.88
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -117,6 +117,7 @@ a[aria-label="Grok"], div > aside[aria-label*="Premium"], div[data-testid="inlin
 .thd_settings_toggle_enabled { background-color: #292828; border-width: 0.045em; border-color: #404040; cursor:pointer; color: rgb(190, 190, 190); }
 `);
 
+let replaceHost = window.location.host.replace('.x.com','.twitter.com').replace('/x.com','/twitter.com');
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
 const isGM = (typeof GM_addValueChangeListener === 'undefined');
 
@@ -240,6 +241,41 @@ const changeToTwitter = function(url)
 var transactID = "";
 var authy = "";
 
+unsafeWindow.nativeFetch = unsafeWindow.fetch;
+
+unsafeWindow.customFetch = exportFunction(async function(request, headers) {
+
+  var req;
+  var response;
+    console.log(request);
+  if (typeof request == 'string') {
+    request = request.replaceAll('.x.com','.twitter.com').replaceAll('/x.com','/twitter.com');
+    req = new Request(request, headers);
+    response = await unsafeWindow.nativeFetch(req);
+    response.requestInputObject = req;
+  } else {
+    response = await unsafeWindow.nativeFetch(request, headers);
+  }
+  if (typeof request == 'object') {
+
+    response.requestInputObject = request;
+
+  } else {
+
+    response.requestInputURL = request;
+    response.requestInputObject = req;
+
+  }
+
+  if (headers) { response.requestInputHeaders = headers; }
+
+  return response;
+
+}, unsafeWindow);
+
+unsafeWindow.fetch = unsafeWindow.customFetch;
+
+
 var oldReqHead = unsafeWindow.XMLHttpRequest.prototype.setRequestHeader;
 unsafeWindow.XMLHttpRequest.prototype.setRequestHeader = exportFunction(function(name, value)
 {
@@ -255,6 +291,10 @@ unsafeWindow.XMLHttpRequest.prototype.setRequestHeader = exportFunction(function
 }, unsafeWindow);
 
 
+var navi = navigation.prototype;
+console.log(navi);
+console.log("navi");
+
 //Intercept the Timeline to pre-cache information about tweets and filter out unwanted tweets
 var openOpen = unsafeWindow.XMLHttpRequest.prototype.open;
 unsafeWindow.XMLHttpRequest.prototype.open = exportFunction(function(method, url)
@@ -264,13 +304,33 @@ unsafeWindow.XMLHttpRequest.prototype.open = exportFunction(function(method, url
     openOpen.call(this, method, url);
 }, unsafeWindow);
 
+const _fetch = unsafeWindow.fetch;
+var origSend = unsafeWindow.XMLHttpRequest.prototype.send;
+unsafeWindow.XMLHttpRequest.prototype.send = exportFunction(function (body) {
+  origSend.call(this, replaceAllX(body));
+
+}, unsafeWindow);
+
+
+function replaceAllX(json)
+{
+    if(json == null) {return null;}
+    if(json.includes("twitter'") || json.includes("twitter.'") || json.includes("twitter.com'") )
+    {
+        console.log("has replace");
+
+    }
+    return json.replaceAll("/x.com","/twitter.com").replaceAll(".x.com",".twitter.com");
+}
 
 function processXMLOpen(thisRef, method, url)
 {
     if(prefsLoaded === false) {
         loadToggleValues();
     }
-
+    url = replaceAllX(url);
+console.log(thisRef);
+    thisRef.responseURL = replaceAllX(thisRef.responseURL);
     if ((url.includes('video.twimg.com') || url.includes('master_dynamic')) && url.includes('.m3u8?'))
     {
         thisRef.addEventListener('readystatechange', function (e)
@@ -304,7 +364,7 @@ function processXMLOpen(thisRef, method, url)
                     Object.defineProperty(thisRef, 'response', { writable: true });
                     Object.defineProperty(thisRef, 'responseText', { writable: true });
 
-                    thisRef.response = thisRef.responseText = JSON.stringify(json);
+                    thisRef.response = thisRef.responseText = replaceAllX(JSON.stringify(json));
                 }
             }
         });
@@ -340,7 +400,7 @@ function processXMLOpen(thisRef, method, url)
                     Object.defineProperty(thisRef, 'response', { writable: true });
                     Object.defineProperty(thisRef, 'responseText', { writable: true });
 
-                   thisRef.response = thisRef.responseText = JSON.stringify(json);
+                   thisRef.response = thisRef.responseText = replaceAllX(JSON.stringify(json));
                 }
             }
         });
@@ -372,9 +432,31 @@ function processXMLOpen(thisRef, method, url)
                     Object.defineProperty(thisRef, 'response', { writable: true });
                     Object.defineProperty(thisRef, 'responseText', { writable: true });
 
-                    thisRef.response = thisRef.responseText = JSON.stringify(json);
+                    thisRef.response = thisRef.responseText = replaceAllX(JSON.stringify(json));
                 }
 
+            }
+        });
+    }
+    else
+    {
+         thisRef.addEventListener('readystatechange', function (e)
+        {
+            if(thisRef.readyState === 4)
+            {
+                try
+                {
+                    if(e.target.responseText != null)
+                    {
+                        Object.defineProperty(thisRef, 'response', { writable: true });
+                        Object.defineProperty(thisRef, 'responseText', { writable: true });
+                        thisRef.response = thisRef.responseText = replaceAllX(e.target.responseText);
+                    }
+                }
+                catch(e)
+                {
+                    ///not json
+                }
             }
         });
     }
@@ -638,6 +720,7 @@ function processTimelineEntry(entry)
 {
     if(entry?.content?.clientEventInfo?.component == "suggest_promoted")
     {
+        console.log("stripped promo");
         entry.content = {};
         return;
     }
@@ -2827,14 +2910,16 @@ document.addEventListener('copy', function(e)
         }
     }
 });
-
+navigation.addEventListener('navigate', () => {
+  console.log('page changed');
+});
 
 (async function ()
 {
     'use strict';
 
     if (isDirectImagePage(window.location.href)) { return; }
-   // if(window.location.href.includes('.x.com/') || window.location.href.includes('/x.com/')) { window.location.href = changeToTwitter(window.location.href); return; }
+    //if(window.location.href.includes('.x.com/') || window.location.href.includes('/x.com/')) { window.location.href = changeToTwitter(window.location.href); return; }
 
     let prefsLoading = loadToggleValues();
 
