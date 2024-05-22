@@ -356,6 +356,28 @@ function processXMLOpen(thisRef, method, url)
             }
         });
     }
+    else if(url.includes('all.json?') && window.location.href.endsWith('/notifications'))
+    {
+        thisRef.addEventListener('readystatechange', function (e)
+        {
+            if(thisRef.readyState === 4)
+            {
+                let json = JSON.parse(e.target.response);
+
+                let notifs = json?.timeline?.instructions ?? null;
+                if(notifs != null)
+                {
+                    notifs = processNotificationsData(notifs);
+
+                    Object.defineProperty(thisRef, 'response', { writable: true });
+                    Object.defineProperty(thisRef, 'responseText', { writable: true });
+
+                    thisRef.response = thisRef.responseText = JSON.stringify(json);
+                }
+
+            }
+        });
+    }
     /*   else if(url.includes('guide.json')) //Explore
         {
              this.addEventListener('readystatechange', function (e)
@@ -560,6 +582,33 @@ class Tweet
             width: mediaItem.original_info.width,
             height: mediaItem.original_info.height
         };
+    }
+}
+
+function processNotificationsData(notifs)
+{
+    if(notifs.length > 0)
+    {
+        for(let i = 0; i < notifs.length; i++)
+        {
+            if('addEntries' in notifs[i])
+            {
+                let entries = notifs[i].addEntries?.entries ?? null;
+
+                if(entries != null && entries.length > 0)
+                {
+                    let entryCnt = entries.length;
+                    for(let e = entryCnt - 1; e >= 0; e--)
+                    {
+                        let entry = entries[e];
+                        if(entry?.content?.item?.clientEventInfo?.element?.startsWith("generic_magic"))
+                        {
+                           entries.splice(e, 1);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
