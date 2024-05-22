@@ -1,6 +1,7 @@
 # Twitter AutoHD
 - Reverts "X" branding to Twitter style!  (Logo, Splash, Title)
-- Enforces Twitter.com domain.
+- Removes Video advertisements
+- Enforces Twitter.com domain. (broken after recent Twitter change... trying to fix)
 - Automatically makes Twitter load the highest resolution of video or image (optional). <br/> 
   >***(even if the image isn't expanded to full view, it will be highest quality)***<br/>
   >***(when off, content will still be saved at its highest quality though)***<br/>
