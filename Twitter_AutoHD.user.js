@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.91
+// @version      2.92
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -2129,10 +2129,10 @@ async function updateContextMenuLink(tweetData, mediaInfo)
     {
         mediaInfo.mediaElem.crossOrigin = 'Anonymous'; //Needed to avoid browser preventing the Canvas from being copied when doing "Copy Image"
 
-        ctxMenuOpenInNewTab.onclick = () => { openInNewTab(mediaInfo.data.getContentURL()) };
-        ctxMenuSaveAs.onclick = () => { saveMedia(mediaInfo.data.getContentURL()) };
+        ctxMenuOpenInNewTab.onmouseup = () => { openInNewTab(mediaInfo.data.getContentURL()) };
+        ctxMenuSaveAs.onmouseup = () => { saveMedia(mediaInfo.data.getContentURL()) };
 
-        ctxMenuCopyImg.onclick = () =>
+        ctxMenuCopyImg.onmouseup = () =>
         {
             setContextMenuVisible(false);
             try
@@ -2149,16 +2149,16 @@ async function updateContextMenuLink(tweetData, mediaInfo)
             }
             catch (err) { console.log(err); };
         };
-        ctxMenuCopyAddress.onclick = (e) => { copyAddress(mediaInfo.data.getContentURL()); };
-        ctxMenuGRIS.onclick = () => { setContextMenuVisible(false);
+        ctxMenuCopyAddress.onmouseup = (e) => { copyAddress(mediaInfo.data.getContentURL()); };
+        ctxMenuGRIS.onmouseup = () => { setContextMenuVisible(false);
                                      window.open("https://www.google.com/searchbyimage?sbisrc=cr_1_5_2&image_url=" + mediaInfo.data.getContentURL()); };
     }
     else //Video
     {
-        ctxMenuOpenVidInNewTab.onclick = () => { openInNewTab(mediaInfo.data.getContentURL()) };
+        ctxMenuOpenVidInNewTab.onmouseup = () => { openInNewTab(mediaInfo.data.getContentURL()) };
         if(!mediaInfo.mediaElem.hasAttribute("downloading"))
         {
-            ctxMenuSaveAsVid.onclick = async() =>
+            ctxMenuSaveAsVid.onmouseup = async() =>
             {
                 mediaInfo.mediaElem.setAttribute("downloading","");
                 await saveMedia(mediaInfo.data.getContentURL());
@@ -2166,7 +2166,7 @@ async function updateContextMenuLink(tweetData, mediaInfo)
             };
         } else { ctxMenuSaveAsVid.style.display = "none"; }
 
-        ctxMenuCopyVidAddress.onclick = () => { copyAddress(mediaInfo.data.getContentURL()) };
+        ctxMenuCopyVidAddress.onmouseup = () => { copyAddress(mediaInfo.data.getContentURL()) };
     }
 
     //Generic Stuff
