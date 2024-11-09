@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Twitter AutoHD
 // @namespace    Invertex
-// @version      2.89
+// @version      2.91
 // @description  Forces whole image to show on timeline with bigger layout for multi-image. Forces videos/images to show in highest quality and adds a download button and right-click for content that ensures an organized filename. As well as other improvements.
 // @author       Invertex
 // @updateURL    https://github.com/Invertex/Twitter-AutoHD/raw/master/Twitter_AutoHD.user.js
@@ -115,6 +115,7 @@ a[aria-label="Grok"], div > aside[aria-label*="Premium"], div[data-testid="inlin
 .thd_settings_toggle { margin: 0.01em 0.4em 0.01em; border-style: solid; border-width: 0.015em; border-color: #101010; background-color: #202020; border-radius:6px; color: rgb(100, 100, 100); }
 .thd_settings_toggle:hover { background-color: #393838; border-width: 0.045em; border-color: #505050; cursor:pointer; color: rgb(210, 210 210); }
 .thd_settings_toggle_enabled { background-color: #292828; border-width: 0.045em; border-color: #404040; cursor:pointer; color: rgb(190, 190, 190); }
+#thd_toggleTrending { width: 100% !important; margin: 0px !important; }
 `);
 
 //Greasemonkey does not have this functionality, so helpful way to check which function to use
@@ -1659,9 +1660,9 @@ async function watchSideBar(main)
 {
     awaitElem(main, 'div[data-testid="sidebarColumn"]', argsChildAndSub).then((sideBar) =>
     {
-        awaitElem(sideBar, 'section[role="region"] > [role="heading"]', argsChildAndSub).then((sideBarTrending) =>
+        awaitElem(sideBar, 'section[role="region"] > div:has([data-testid="trend"])', argsChildAndSub).then((sideBarTrending) =>
         {
-            setupTrendingControls(sideBarTrending.parentElement);
+            setupTrendingControls(sideBarTrending);
             setupToggles(sideBar);
             clearTopicsAndInterests();
         });
@@ -1759,15 +1760,16 @@ async function loadToggleValues()
 async function setupToggles(sidePanel)
 {
     if(sidePanel.querySelector('.thd_settings_collapsible')){ return; }
-    sidePanel = sidePanel.querySelector('div:has(> nav)');
+    sidePanel = sidePanel.querySelector('div:has(> div > nav)');
 
     let settingsFold = document.createElement('button');
     settingsFold.className = 'thd_settings_collapsible';
     settingsFold.innerText = "Twitter AutoHD Settings:";
     let settingsContainer = document.createElement('div');
     settingsContainer.className = 'thd_settings_content thd_settings_content_closed';
-    sidePanel.appendChild(settingsFold);
-    sidePanel.appendChild(settingsContainer);
+    let footer_elem = sidePanel.querySelector('div:has(> nav)');
+    sidePanel.insertBefore(settingsFold, footer_elem);
+    sidePanel.insertBefore(settingsContainer, footer_elem);
     sidePanel = settingsContainer;
     settingsFold.addEventListener("click", function() {
         this.classList.toggle("thd_settings_active");
@@ -1871,21 +1873,19 @@ async function processBlurButton(tweet)
 
 async function setupTrendingControls(trendingBox)
 {
-    const showStr = "Show";
-    const hideStr = "Hide";
+    const showStr = "Show Trending";
+    const hideStr = "Hide Trending";
 
     const setTrendingVisible = function (container, button, hidden)
     {
-        container.style.maxHeight = hidden ? "44px" : "none";
+        container.style.maxHeight = hidden ? "20px" : "none";
         button.innerText = hidden ? showStr : hideStr;
         setUserPref(usePref_hideTrendingKey, hidden);
     };
 
-    let trendingTitle = await awaitElem(trendingBox, 'h2', argsChildAndSub);
-
-    if (!addHasAttribute(trendingTitle, modifiedAttr))
+    if (!addHasAttribute(trendingBox, modifiedAttr))
     {
-        let toggle = trendingTitle.querySelector('#thd_toggleTrending');
+        let toggle = trendingBox.querySelector('#thd_toggleTrending');
 
         if (toggle == null)
         {
@@ -1895,7 +1895,7 @@ async function setupTrendingControls(trendingBox)
                 let isHidden = toggle.innerText == hideStr;
                 setTrendingVisible(trendingBox, toggle, isHidden);
             });
-            trendingTitle.appendChild(toggle);
+            trendingBox.prepend(toggle);
         }
         getUserPref(usePref_hideTrendingKey, true).then((visible) =>
         {
