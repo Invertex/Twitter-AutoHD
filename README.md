@@ -1,3 +1,7 @@
+# Switch to BlueSky, don't enable Musk's goals to be a controlling force of the internet space.
+# I am making the same script for it here:
+https://github.com/Invertex/BSKY-Enhancer
+
 # Twitter AutoHD
 - Reverts "X" branding to Twitter style!  (Logo, Splash, Title)
 - Removes Video advertisements
